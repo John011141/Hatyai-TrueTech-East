@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบบันทึกงานซ่อม: แสดงรูปภาพหลักฐาน</title>
+    <title>ระบบบันทึกงานซ่อม: ซิงค์ข้อมูลเรียลไทม์ (Final Sync)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
@@ -13,13 +13,11 @@
         .auth-container { max-width: 400px; }
         .job-card { transition: all 0.2s ease; cursor: pointer; }
         .job-card:hover { transform: translateY(-2px); box-shadow: 0 6px 10px rgba(0, 0, 0, 0.1); }
-        /* CSS สำหรับไฮไลท์ Input และ Card ที่ไม่ผ่าน */
         .border-red-500 { border-color: #ef4444 !important; border: 2px solid #ef4444 !important; }
         .input-error { border-color: #ef4444 !important; border: 1px solid #ef4444 !important; }
-        /* Thumbnail styles */
         .image-thumbnail {
-            width: 100px; /* Adjust as needed */
-            height: 100px; /* Adjust as needed */
+            width: 100px;
+            height: 100px;
             object-fit: cover;
             border-radius: 8px;
             border: 1px solid #e5e7eb;
@@ -106,6 +104,10 @@
                         <i class="fas fa-trash-alt mr-2"></i> ล้างข้อมูลทั้งหมด
                     </button>
                 </div>
+                <div id="loadingSpinner" class="text-center p-10 hidden">
+                    <i class="fas fa-spinner fa-spin text-3xl text-red-500"></i>
+                    <p class="text-gray-500 mt-2">กำลังโหลดรายการงาน...</p>
+                </div>
                 <div id="jobsListContainer" class="space-y-4">
                     </div>
             </div>
@@ -157,24 +159,63 @@
         let currentRole = null;
         let userData = {}; 
         let registeredUsers = {};
-        let syncInterval = null;
+        
+        // ** NEW: Store the Firestore Unsubscribe function **
+        let jobsUnsubscribe = null; 
         
         // *** รหัสผ่านสำหรับล้างข้อมูล: John-19195 ***
         const WIPE_PASSWORD = 'John-19195'; 
 
         // --- 0. Data Synchronization Functions (Firebase Firestore) ---
         
-        // NEW: Load Jobs from Firebase
-        async function loadJobs() {
-            try {
-                // ดึงงานทั้งหมด จัดเรียงตาม ID 
-                const snapshot = await db.collection("jobs").orderBy("id", "asc").get();
-                jobs = snapshot.docs.map(doc => doc.data());
-                console.log("Jobs loaded from Firebase:", jobs.length);
-            } catch (error) {
-                console.error("Error loading jobs from Firebase:", error);
-                // ไม่มีการสำรอง LocalStorage อีกต่อไปเพื่อบังคับใช้ Cloud Sync
-                jobs = []; 
+        // OLD: Load Jobs from Firebase - REMOVED, replaced by startJobListener
+
+        // NEW: Live Listener for Jobs (Real-time Sync)
+        function startJobListener() {
+            // Stop previous listener if it exists
+            if (jobsUnsubscribe) {
+                jobsUnsubscribe();
+            }
+
+            let jobsRef = db.collection("jobs").orderBy("id", "asc");
+            
+            // ถ้าเป็นช่าง ให้ Query เฉพาะงานของตัวเอง
+            if (currentRole === 'user') {
+                jobsRef = jobsRef.where("technicianId", "==", userData.id);
+            }
+            
+            // *** NEW: ใช้ onSnapshot เพื่อรับการอัปเดตแบบเรียลไทม์ ***
+            jobsUnsubscribe = jobsRef.onSnapshot(snapshot => {
+                const newJobs = [];
+                snapshot.forEach(doc => {
+                    newJobs.push(doc.data());
+                });
+                
+                // ตรวจสอบความเปลี่ยนแปลงเพื่อหลีกเลี่ยงการเรนเดอร์ซ้ำซ้อนที่ไม่จำเป็น
+                if (JSON.stringify(jobs) !== JSON.stringify(newJobs)) {
+                    jobs = newJobs;
+                    // console.log(`[Realtime Sync] Jobs updated: ${jobs.length} items. Rendering list...`);
+                    // ถ้าผู้ใช้กำลังดูหน้ารายการงานอยู่ ให้อัปเดตทันที
+                    if (document.getElementById('jobListView').classList.contains('hidden') === false) {
+                        renderJobsList();
+                    }
+                }
+                
+                // ซ่อน Spinner ทันทีที่โหลดครั้งแรก
+                document.getElementById('loadingSpinner').classList.add('hidden'); 
+            }, error => {
+                console.error("Error setting up job listener:", error);
+                document.getElementById('loadingSpinner').classList.add('hidden');
+                alert("เกิดข้อผิดพลาดในการเชื่อมต่อ Real-time (Job Sync)");
+            });
+        }
+        
+        // NEW: Stop the Live Listener
+        function stopJobListener() {
+            if (jobsUnsubscribe) {
+                jobsUnsubscribe();
+                jobsUnsubscribe = null;
+                // console.log("[Realtime Sync] Listener stopped.");
             }
         }
         
@@ -183,11 +224,11 @@
             try {
                 // บันทึกงานใหม่ และใช้ ID เป็น Document ID
                 await db.collection("jobs").doc(String(newJob.id)).set(newJob);
-                console.log("Job saved to Firebase:", newJob.id);
+                // console.log("Job saved to Firebase:", newJob.id);
             } catch (error) {
                 console.error("Error saving job to Firebase:", error);
                 alert("บันทึกงานไม่สำเร็จ! (Firebase Error)");
-                throw error; // ส่ง Error ต่อไปให้ handleSubmit จัดการ
+                throw error; 
             }
         }
         
@@ -195,11 +236,8 @@
         async function updateJobStatus(jobId, status) {
             try {
                 await db.collection("jobs").doc(String(jobId)).update({ status: status });
-                // อัปเดตข้อมูลใน jobs array ทันที
-                const job = jobs.find(j => j.id === jobId);
-                if (job) job.status = status;
-                
-                console.log(`Job ${jobId} status updated to ${status} in Firebase.`);
+                // Note: The Realtime Listener will handle the 'jobs' array update and re-render.
+                // console.log(`Job ${jobId} status updated to ${status} in Firebase.`);
             } catch (error) {
                 console.error("Error updating job status:", error);
                 alert("อัปเดตสถานะงานไม่สำเร็จ! (Firebase Error)");
@@ -212,7 +250,7 @@
                 // ใช้ username เป็น Document ID
                 await db.collection("users").doc(user.username).set(user);
                 registeredUsers[user.username] = user; // อัปเดตใน Local object
-                console.log("User saved to Firebase:", user.username);
+                // console.log("User saved to Firebase:", user.username);
             } catch (error) {
                 console.error("Error saving user to Firebase:", error);
                 alert("บันทึกข้อมูลช่างไม่สำเร็จ! (Firebase Error)");
@@ -228,10 +266,9 @@
                     const user = doc.data();
                     registeredUsers[user.username] = user;
                 });
-                console.log("Users loaded from Firebase:", Object.keys(registeredUsers).length);
+                // console.log("Users loaded from Firebase:", Object.keys(registeredUsers).length);
             } catch (error) {
                 console.error("Error loading users from Firebase:", error);
-                // ไม่มีการสำรอง LocalStorage อีกต่อไปเพื่อบังคับใช้ Cloud Sync
                 registeredUsers = {};
             }
         }
@@ -239,21 +276,23 @@
         // NEW: Clear ALL Data from Firebase Collections
         async function clearAllFirebaseData() {
             try {
-                // 1. Delete all Jobs
+                // 1. Delete all Jobs (ใช้ Batch Delete เพื่อประสิทธิภาพที่ดีกว่า)
                 const jobDocs = await db.collection('jobs').get();
-                const jobDeletePromises = jobDocs.docs.map(doc => doc.ref.delete());
-                await Promise.all(jobDeletePromises);
+                const jobBatch = db.batch();
+                jobDocs.docs.forEach(doc => jobBatch.delete(doc.ref));
+                await jobBatch.commit();
                 jobs = [];
 
                 // 2. Delete all Users (ยกเว้น Admin ซึ่งจะถูกสร้างกลับมาใหม่)
                 const userDocs = await db.collection('users').get();
-                const userDeletePromises = userDocs.docs.map(doc => doc.ref.delete());
-                await Promise.all(userDeletePromises);
+                const userBatch = db.batch();
+                userDocs.docs.forEach(doc => userBatch.delete(doc.ref));
+                await userBatch.commit();
                 registeredUsers = {}; 
                 
                 // 3. Re-create Admin immediately
                 const adminUser = { password: 'admin', id: 'ADM001', name: 'Admin System', phone: '090-000-0000', username: 'admin' };
-                await saveUser(adminUser); // ใช้ saveUser เพื่อบันทึก Admin กลับไป
+                await saveUser(adminUser); 
                 
                 console.log("ALL application data (Jobs and Users) has been CLEARED from Firebase.");
                 alert('✅ ล้างข้อมูลทั้งหมดใน Firebase เรียบร้อยแล้ว');
@@ -264,47 +303,23 @@
             }
         }
         
-        // *** NEW: ฟังก์ชันยืนยันรหัสผ่านสำหรับการล้างข้อมูล (เรียกใช้ clearAllFirebaseData) ***
         async function confirmDataWipe() {
             if (currentRole !== 'admin') return; 
             
             const inputPass = prompt("⚠️ คำเตือน! การดำเนินการนี้จะลบข้อมูลงานซ่อมและรายชื่อช่างทั้งหมดบนระบบคลาวด์ (Firebase)\n\nโปรดป้อนรหัสผ่านสำหรับล้างข้อมูลเพื่อยืนยัน:");
             
             if (inputPass === WIPE_PASSWORD) {
-                await clearAllFirebaseData(); // ใช้ await
-                // โหลดข้อมูลใหม่หลังจากล้าง
-                await loadJobs(); 
+                stopJobListener();
+                await clearAllFirebaseData(); 
                 await loadUsers(); 
-                renderJobsList();
+                startJobListener();
                 showJobListView();
             } else if (inputPass !== null) {
                 alert('❌ รหัสผ่านไม่ถูกต้อง การล้างข้อมูลถูกยกเลิก');
             }
         }
-
-        // แก้ไข startAdminSync ให้เรียกใช้ loadJobs() แบบ async
-        function startAdminSync() {
-            if (syncInterval) clearInterval(syncInterval); 
-            
-            syncInterval = setInterval(async () => { // เพิ่ม async
-                if (currentRole === 'admin' && !document.getElementById('jobListView').classList.contains('hidden')) { 
-                    const oldJobCount = jobs.length;
-                    await loadJobs(); // ใช้ await
-                    if (jobs.length !== oldJobCount) {
-                        renderJobsList();
-                        console.log(`[Admin Sync] Found ${jobs.length - oldJobCount} new job(s). Updating list.`);
-                    }
-                }
-            }, 5000);
-        }
-
-        function stopAdminSync() {
-            if (syncInterval) {
-                clearInterval(syncInterval);
-                syncInterval = null;
-            }
-        }
-
+        
+        // OLD: startAdminSync and stopAdminSync - REMOVED
 
         // --- 1. View Management ---
 
@@ -323,8 +338,9 @@
             }
         }
         
-        async function showUserListView() { // เพิ่ม async
-            await loadUsers(); // ใช้ await
+        async function showUserListView() { 
+            stopJobListener(); // หยุด listener งานซ่อมเมื่อเข้าหน้ารายชื่อช่าง
+            await loadUsers(); 
             
             document.getElementById('jobListView').classList.add('hidden');
             document.getElementById('repairFormView').classList.add('hidden');
@@ -345,8 +361,11 @@
             renderUserList(); 
         }
 
-        async function showJobListView() { // เพิ่ม async
-            await loadJobs(); // ใช้ await
+        async function showJobListView() {
+            document.getElementById('loadingSpinner').classList.remove('hidden'); // แสดง Spinner
+            document.getElementById('jobsListContainer').innerHTML = ''; // เคลียร์รายการเก่า
+
+            startJobListener(); // เริ่ม Real-time Listener 
             
             document.getElementById('jobListView').classList.remove('hidden');
             document.getElementById('repairFormView').classList.add('hidden');
@@ -371,10 +390,13 @@
                 btnUserView.classList.remove('bg-gray-400', 'text-gray-800');
             }
             
-            renderJobsList();
+            renderJobsList(); // จะแสดงรายการงานล่าสุดที่โหลดจาก listener
+            document.getElementById('loadingSpinner').classList.add('hidden'); // ซ่อน Spinner เมื่อโหลดเสร็จ
         }
 
         function showFormView() {
+            stopJobListener(); // หยุด listener เมื่อไปหน้าฟอร์ม
+            
             document.getElementById('jobListView').classList.add('hidden');
             document.getElementById('jobDetailsView').classList.add('hidden');
             document.getElementById('userListView').classList.add('hidden'); 
@@ -405,8 +427,8 @@
             fillTechnicianForm();
         }
 
-        async function showJobDetails(jobId) { // เพิ่ม async
-            await loadJobs(); // ใช้ await
+        async function showJobDetails(jobId) { 
+            // ไม่ต้อง loadJobs() เพราะ jobs array ถูกอัปเดตตลอดเวลาโดย listener 
             const job = jobs.find(j => j.id === jobId);
             if (!job) {
                 alert('ไม่พบรายการงาน');
@@ -542,37 +564,44 @@
 
         // --- 2. Authentication Logic ---
 
-        async function unifiedLogin() { // เพิ่ม async
-            await loadUsers(); // ใช้ await
+        async function unifiedLogin() { 
+            document.getElementById('loadingSpinner').classList.remove('hidden'); // แสดง Spinner
+            await loadUsers(); 
+            
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             
+            let success = false;
+
             if (username === 'admin' && password === 'admin') {
                 currentRole = 'admin';
                 userData = { id: 'ADM001', name: 'Admin System', phone: '090-000-0000', username: username };
                 
-                // ตรวจสอบและสร้าง Admin ใน Firebase ถ้ายังไม่มี
                 if (!registeredUsers[username]) {
                     const adminUser = { password: password, id: 'ADM001', name: 'Admin System', phone: '090-000-0000', username: username };
                     await saveUser(adminUser); 
                 }
-                setupMainApp();
-                return;
+                success = true;
             }
 
             const registeredUser = registeredUsers[username];
-            if (registeredUser && registeredUser.password === password) {
+            if (!success && registeredUser && registeredUser.password === password) {
                 currentRole = 'user';
                 userData = { id: registeredUser.id, name: registeredUser.name, phone: registeredUser.phone, username: username };
-                setupMainApp();
-                return;
+                success = true;
             }
 
-            alert('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่');
+            document.getElementById('loadingSpinner').classList.add('hidden'); // ซ่อน Spinner
+
+            if (success) {
+                setupMainApp();
+            } else {
+                alert('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่');
+            }
         }
         
-        async function registerUser() { // เพิ่ม async
-            await loadUsers(); // ใช้ await
+        async function registerUser() { 
+            await loadUsers(); 
             const user = document.getElementById('regUsername').value.trim();
             const password = document.getElementById('regPassword').value;
             const id = document.getElementById('regEmployeeId').value.trim();
@@ -586,7 +615,7 @@
                 }
                 
                 const newUser = { password: password, id: id, name: name, phone: phone, username: user };
-                await saveUser(newUser); // ใช้ await saveUser
+                await saveUser(newUser); 
                 
                 currentRole = 'user';
                 userData = { id: id, name: name, phone: phone, username: user };
@@ -598,14 +627,14 @@
         }
 
         function logout() {
+            stopJobListener(); // ต้องหยุด listener เมื่อ Logout
+            
             currentRole = null;
             userData = {};
             document.getElementById('username').value = ''; 
             document.getElementById('password').value = ''; 
             alert('ออกจากระบบเรียบร้อย');
             showPage('adminLogin');
-            
-            stopAdminSync(); 
             
             document.getElementById('repairForm').reset();
             document.getElementById('dynamicInputsContainer').innerHTML = '';
@@ -621,37 +650,23 @@
             document.getElementById('formContactPhone').value = userData.phone || '';
         }
 
-        // *** ฟังก์ชัน setupMainApp: จัดการการแสดงผลปุ่ม Admin ***
-        async function setupMainApp() { // เพิ่ม async
-            await loadUsers(); // ใช้ await
+        async function setupMainApp() { 
+            await loadUsers(); 
 
             if (currentRole === 'admin') {
-                await loadJobs(); // ใช้ await
-                
-                // แสดงปุ่ม Admin
-                const userViewButton = document.getElementById('btnUserView');
-                if(userViewButton) userViewButton.classList.remove('hidden');
-                
-                const clearButton = document.getElementById('btnClearAllData');
-                if(clearButton) clearButton.classList.remove('hidden');
+                document.getElementById('btnUserView').classList.remove('hidden');
+                document.getElementById('btnClearAllData').classList.remove('hidden');
             } else {
-                // ซ่อนปุ่ม Admin ทั้งหมดสำหรับ User
-                const userViewButton = document.getElementById('btnUserView');
-                if(userViewButton) userViewButton.classList.add('hidden');
-                
-                const clearButton = document.getElementById('btnClearAllData');
-                if(clearButton) clearButton.classList.add('hidden');
+                document.getElementById('btnUserView').classList.add('hidden');
+                document.getElementById('btnClearAllData').classList.add('hidden');
             }
             
             document.getElementById('currentRole').innerText = `${userData.name} (${currentRole === 'admin' ? 'ผู้ดูแลระบบ' : userData.id})`;
             fillTechnicianForm(); 
             showPage('mainApp');
             
-            if (currentRole === 'admin') {
-                startAdminSync();
-            } else {
-                stopAdminSync();
-            }
+            // เริ่ม listener เมื่อเข้าสู่ Main App
+            startJobListener();
         }
 
         // --- 3. Job List & User List Management ---
@@ -660,20 +675,20 @@
             const container = document.getElementById('jobsListContainer');
             container.innerHTML = '';
             
-            let filteredJobs = [];
-
-            if (currentRole === 'admin') {
-                filteredJobs = jobs; 
-            } else if (currentRole === 'user') {
-                filteredJobs = jobs.filter(job => job.technicianId === userData.id);
-            }
-
+            // ใช้ jobs array ที่ถูกอัปเดตจาก Live Listener แล้ว
+            let filteredJobs = jobs; 
+            
+            // Note: ไม่ต้องกรองตาม technicianId อีกแล้ว เพราะ Live Listener จะทำ Query กรองให้แล้ว
+            
             if (filteredJobs.length === 0) {
                 container.innerHTML = '<p class="p-6 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 rounded">ยังไม่มีรายการงานในขณะนี้</p>';
                 return;
             }
 
             filteredJobs.sort((a, b) => b.id - a.id);
+            
+            // ใช้ DocumentFragment เพื่อลดการเข้าถึง DOM ซ้ำๆ
+            const fragment = document.createDocumentFragment();
 
             filteredJobs.forEach(job => {
                 const isPending = job.status === 'pending';
@@ -683,7 +698,6 @@
                 
                 let actionButton = '';
                 if (currentRole === 'admin' && isPending) {
-                    // เรียก completeJob แบบมี await
                     actionButton = `<button onclick="event.stopPropagation(); completeJob(${job.id})" class="px-4 py-1.5 bg-green-600 text-white rounded font-semibold hover:bg-green-700 transition"><i class="fas fa-check"></i> ดำเนินการเสร็จสิ้น</button>`;
                 }
 
@@ -703,34 +717,33 @@
                         ${actionButton}
                     </div>
                 `;
-                container.appendChild(jobCard);
+                fragment.appendChild(jobCard);
             });
+            
+            container.appendChild(fragment); // แทรก Fragment เข้า DOM เพียงครั้งเดียว
         }
         
-        async function completeJob(jobId) { // เพิ่ม async
+        async function completeJob(jobId) { 
             const jobIndex = jobs.findIndex(job => job.id === jobId);
             if (jobIndex > -1) {
-                // เปลี่ยนไปเรียกใช้ Firebase update
+                // อัปเดตใน Firebase (Listener จะรับการอัปเดตและ re-render list โดยอัตโนมัติ)
                 await updateJobStatus(jobId, 'completed');
-                 
+                
                 alert(`งานหมายเลข ${jobId} ถูกทำเครื่องหมายว่า "ดำเนินการเสร็จสิ้น" แล้ว`);
-                renderJobsList();
+                // Note: ไม่ต้องเรียก renderJobsList() เพราะ Listener จะทำให้อัตโนมัติ
             }
         }
         
-        // *** ฟังก์ชันแก้ไข: renderUserList (ตัด Admin ออกทั้งหมด) ***
         function renderUserList() {
             const container = document.getElementById('userListContainer');
             const userArray = Object.values(registeredUsers);
             
-            // กรองบัญชี Admin ออกจากลิสต์ (username: 'admin') และกรองผู้ใช้ที่ข้อมูลไม่สมบูรณ์
             const technicians = userArray.filter(user => {
                 return user.username !== 'admin' && user.name && user.id;
             });
             
             container.innerHTML = '';
             
-            // Header/Summary - นับเฉพาะช่างที่กรองแล้วเท่านั้น
             container.innerHTML += `<div class="p-4 bg-blue-100 border-l-4 border-blue-500 text-blue-800 rounded mb-4">
                 <h3 class="text-xl font-bold"><i class="fas fa-users-cog mr-2"></i> รายการช่างที่ลงทะเบียน:</h3>
                 <p class="text-sm mt-1">จำนวนช่างทั้งหมด: <span class="font-bold text-lg">${technicians.length}</span> คน</p>
@@ -741,7 +754,6 @@
                 return;
             }
 
-            // Table Start
             let tableHtml = `<div class="bg-white shadow-md rounded-lg overflow-hidden"><table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                     <tr>
@@ -753,7 +765,6 @@
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">`;
 
-            // Table Rows
             technicians.forEach((tech, index) => {
                 const rowClass = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
                 tableHtml += `
@@ -774,12 +785,22 @@
 
         // --- 4. Form Submission Logic ---
 
-        async function handleSubmit() { // เพิ่ม async
+        async function handleSubmit() { 
             if (!validateForm()) return; 
 
-            await loadJobs(); // ใช้ await เพื่อให้แน่ใจว่าได้ ID ล่าสุด
-            // คำนวณ ID ใหม่จากข้อมูลที่เพิ่งโหลดมาจาก Firebase
-            const id = jobs.length > 0 ? jobs[jobs.length - 1].id + 1 : 1001; 
+            // ต้องโหลดข้อมูลเพื่อหา ID ล่าสุดก่อน
+            let lastJobId = 1000;
+            try {
+                const lastJobSnapshot = await db.collection("jobs").orderBy("id", "desc").limit(1).get();
+                if (!lastJobSnapshot.empty) {
+                    lastJobId = lastJobSnapshot.docs[0].data().id;
+                }
+            } catch (e) {
+                console.error("Error fetching last job ID:", e);
+                // ใช้ค่าเริ่มต้น 1000 หากเกิดข้อผิดพลาด
+            }
+            
+            const id = lastJobId + 1;
             
             const imagesToSave = selectedFiles.map(f => ({ 
                 name: f.name, 
@@ -799,22 +820,23 @@
             };
             
             try {
-                await saveNewJob(newJob); // เรียกใช้ Firebase Save
+                // บันทึกเข้า Firebase
+                await saveNewJob(newJob); 
+                
+                // Note: Live Listener จะจัดการการอัปเดต jobs array และ renderJobsList() ให้
                 
                 alert(`บันทึกงานหมายเลข ${id} เรียบร้อย สถานะ: กำลังดำเนินการ (ซิงค์กับ Cloud)`);
                 
+                // Reset Form
                 document.getElementById('repairForm').reset();
                 document.getElementById('dynamicInputsContainer').innerHTML = '';
                 document.getElementById('fileListContainer').classList.add('hidden');
-                
                 selectedFiles = []; 
                 renderFileList(); 
-                
                 document.querySelectorAll('#deviceCheckboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
 
                 showJobListView(); 
             } catch (e) {
-                // หาก saveNewJob ล้มเหลว (เช่น Firebase Error) จะไม่ทำการเปลี่ยนหน้า
                 console.error("Submission failed:", e);
                 alert("เกิดข้อผิดพลาดในการบันทึกงาน กรุณาลองใหม่");
             }
@@ -823,42 +845,29 @@
 
         // --- 5. Supporting Form Functions (SN/Image Handling) ---
         
-        // *** ฟังก์ชันแก้ไข: getSNData (อ่านข้อมูลจาก Input Group หลายชุด) ***
         function getSNData() {
             const SNs = [];
-            
-            // วนลูปอ่านข้อมูลจาก Input Field ทั้งหมด
             document.querySelectorAll('.inputs-wrapper').forEach(wrapper => {
                 const deviceType = wrapper.dataset.deviceType;
-
-                // วนลูปตาม Input Group (ชุดอุปกรณ์)
                 wrapper.querySelectorAll('.input-group').forEach(group => {
                     const snEntry = { device: deviceType, sn: '', csky: '', cHDATV: '' };
-                    
                     let hasData = false;
-                    
-                    // หา Input Fields ภายใน Group นี้
                     group.querySelectorAll('input').forEach(input => {
                         const snType = input.dataset.snType;
                         const value = input.value.trim();
-                        
                         if (value) {
                             snEntry[snType] = value;
                             hasData = true;
                         }
                     });
-
-                    // บันทึกเฉพาะชุดที่มีข้อมูล SN/ID อย่างน้อย 1 ช่อง
                     if (hasData) {
                         SNs.push(snEntry);
                     }
                 });
             });
-
             return SNs;
         }
 
-        // *** ฟังก์ชันแก้ไข: validateForm (ตรวจสอบ Input Group หลายชุด) ***
         function validateForm() {
             const circuitId = document.getElementById('circuitId').value;
             const customerName = document.getElementById('customerName').value;
@@ -891,7 +900,6 @@
             
             deviceCards.forEach(card => card.classList.remove('border-red-500'));
             
-            // ตรวจสอบ SNs ใน Input Group หลายชุด
             document.querySelectorAll('.inputs-wrapper').forEach(wrapper => {
                 const deviceType = wrapper.dataset.deviceType;
                 const card = wrapper.closest('.device-card');
@@ -908,21 +916,18 @@
                     if (snInput) {
                         const snValue = snInput.value.trim();
                         snInput.classList.remove('input-error');
-                        // ต้องกรอก SN เสมอ
                         if (!snValue) { groupHasError = true; snInput.classList.add('input-error'); }
                     }
                     
                     if (cHDATVInput) {
                         const atvValue = cHDATVInput.value.trim();
                         cHDATVInput.classList.remove('input-error');
-                        // TrueINNO ต้องกรอก C-HD ATV
                         if (!atvValue && deviceType === 'TrueINNO') { groupHasError = true; cHDATVInput.classList.add('input-error'); }
                     }
 
                     if (cskyInput) {
                         const skyValue = cskyInput.value.trim();
                         cskyInput.classList.remove('input-error');
-                        // TrueVision ต้องกรอก C-SKY
                         if (!skyValue && deviceType === 'TrueVision') { groupHasError = true; cskyInput.classList.add('input-error'); }
                     }
                     
@@ -969,7 +974,6 @@
                 `;
                 container.appendChild(card);
 
-                // Add the first input group automatically
                 addDeviceInput(card.querySelector('button'), deviceType);
             });
         }
@@ -979,17 +983,14 @@
             group.className = 'input-group p-3 border border-gray-300 rounded-md bg-gray-50 relative';
             group.innerHTML = `<h5 class="text-sm font-semibold mb-2 text-gray-700">ชุดอุปกรณ์ที่ ${groupIndex}</h5>`;
 
-            // 1. SN Input (Required for all)
             group.appendChild(createSingleInput('SN', 'sn', 'Serial Number ของอุปกรณ์ (สำคัญ)', true));
 
-            // 2. Specific Inputs
             if (deviceType === 'TrueVision') {
                 group.appendChild(createSingleInput('C-SKY', 'csky', 'ID C-SKY (จำเป็น)', true));
             } else if (deviceType === 'TrueINNO') {
                 group.appendChild(createSingleInput('C-HD ATV', 'cHDATV', 'ID C-HD ATV (จำเป็น)', true));
             }
 
-            // 3. Remove Button
             group.innerHTML += `
                 <button type="button" onclick="removeDeviceInput(this)" 
                     class="absolute top-1 right-1 p-1 text-sm text-red-600 hover:text-red-800 transition">
@@ -1014,12 +1015,11 @@
         }
 
         function addDeviceInput(button, deviceType) {
-            const wrapper = button.previousElementSibling; // inputs-wrapper
+            const wrapper = button.previousElementSibling; 
             const nextGroupIndex = wrapper.querySelectorAll('.input-group').length + 1;
             const newGroup = createInputGroup(deviceType, nextGroupIndex);
             wrapper.appendChild(newGroup);
 
-            // Update button text to show the next index
             button.innerHTML = `<i class="fas fa-plus mr-1"></i> เพิ่มอุปกรณ์ชุดที่ ${nextGroupIndex + 1}`;
         }
 
@@ -1030,18 +1030,14 @@
 
             group.remove();
 
-            // Re-index groups
             wrapper.querySelectorAll('.input-group').forEach((g, index) => {
                 g.querySelector('h5').textContent = `ชุดอุปกรณ์ที่ ${index + 1}`;
             });
 
-            // Update button text
             const nextGroupIndex = wrapper.querySelectorAll('.input-group').length + 1;
             buttonToUpdate.innerHTML = `<i class="fas fa-plus mr-1"></i> เพิ่มอุปกรณ์ชุดที่ ${nextGroupIndex}`;
             
-            // If no groups left, remove the entire card, but only if its not the first type
             if (nextGroupIndex === 1) {
-                // If the user tries to remove the last one, just re-add a new empty one
                 addDeviceInput(buttonToUpdate, wrapper.dataset.deviceType);
             }
         }
@@ -1057,7 +1053,7 @@
                     reader.onload = (e) => {
                         resolve({
                             name: file.name,
-                            dataUrl: e.target.result // Base64 string
+                            dataUrl: e.target.result 
                         });
                     };
                     reader.onerror = error => reject(error);
@@ -1088,6 +1084,8 @@
 
             container.classList.remove('hidden');
 
+            const fragment = document.createDocumentFragment();
+
             selectedFiles.forEach((file, index) => {
                 const listItem = document.createElement('li');
                 listItem.className = 'flex items-center justify-between p-2 bg-white rounded-md border text-sm';
@@ -1108,8 +1106,10 @@
                         </button>
                     </div>
                 `;
-                list.appendChild(listItem);
+                fragment.appendChild(listItem);
             });
+            
+            list.appendChild(fragment);
         }
 
         function removeFile(index) {
@@ -1120,22 +1120,21 @@
 
         // --- 8. Initialization ---
         
-        // Set default view on load
-        document.addEventListener('DOMContentLoaded', async () => { // เพิ่ม async
-            await loadJobs(); // ใช้ await
-            await loadUsers(); // ใช้ await
+        document.addEventListener('DOMContentLoaded', async () => { 
+            showPage('adminLogin'); // แสดงหน้า Login ทันที
             
-            // ตรวจสอบและสร้างบัญชี Admin ใน Firebase ถ้ายังไม่มี
+            // โหลดข้อมูลผู้ใช้ทั้งหมดก่อนเพื่อยืนยันตัวตน
+            await loadUsers();
+            
+            // ตรวจสอบและสร้างบัญชี Admin
             if (!registeredUsers['admin']) {
                 const adminUser = { password: 'admin', id: 'ADM001', name: 'Admin System', phone: '090-000-0000', username: 'admin' };
-                await saveUser(adminUser); // ใช้ await saveUser
+                await saveUser(adminUser); 
             }
             
-            showPage('adminLogin');
             document.getElementById('username').value = '';
             document.getElementById('password').value = '';
 
-            // Ensure Firebase is initialized
             if (typeof db === 'undefined') {
                 alert("❌ การเชื่อมต่อ Firebase ล้มเหลว! โปรดตรวจสอบ Firebase Config และการเปิดใช้งาน Firestore");
             }
