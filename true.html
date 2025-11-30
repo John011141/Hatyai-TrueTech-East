@@ -1,0 +1,1093 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบบันทึกงานซ่อม: แสดงรูปภาพหลักฐาน</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600&display=swap');
+        body { font-family: 'Sarabun', sans-serif; background-color: #f3f4f6; }
+        .hidden { display: none; }
+        .auth-container { max-width: 400px; }
+        .job-card { transition: all 0.2s ease; cursor: pointer; }
+        .job-card:hover { transform: translateY(-2px); box-shadow: 0 6px 10px rgba(0, 0, 0, 0.1); }
+        /* CSS สำหรับไฮไลท์ Input และ Card ที่ไม่ผ่าน */
+        .border-red-500 { border-color: #ef4444 !important; border: 2px solid #ef4444 !important; }
+        .input-error { border-color: #ef4444 !important; border: 1px solid #ef4444 !important; }
+        /* Thumbnail styles */
+        .image-thumbnail {
+            width: 100px; /* Adjust as needed */
+            height: 100px; /* Adjust as needed */
+            object-fit: cover;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container mx-auto p-6 flex justify-center items-center min-h-screen">
+
+        <div id="authView" class="w-full auth-container bg-white p-8 rounded-lg shadow-2xl border border-gray-200">
+            <h1 class="text-3xl font-bold text-gray-800 text-center mb-6"><i class="fas fa-sign-in-alt text-red-600 mr-2"></i> ระบบเข้าใช้งาน</h1>
+            <div id="adminLogin" class="space-y-4">
+                <h2 class="text-lg font-semibold text-gray-700 text-center border-b pb-2 mb-4">เข้าสู่ระบบ</h2>
+                <div><label for="username" class="block text-sm font-medium text-gray-700">ชื่อผู้ใช้ (Admin/ช่าง)</label><input type="text" id="username" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500" placeholder="admin หรือชื่อผู้ใช้ช่าง"></div>
+                <div><label for="password" class="block text-sm font-medium text-gray-700">รหัสผ่าน</label><input type="password" id="password" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500" placeholder="admin หรือรหัสผ่านช่าง"></div>
+                
+                <button onclick="unifiedLogin()" class="w-full py-2 bg-red-600 text-white font-bold rounded shadow hover:bg-red-700 transition duration-150">
+                    <i class="fas fa-sign-in-alt mr-2"></i> เข้าสู่ระบบ
+                </button>
+
+            </div>
+            <hr class="my-6">
+            <div class="text-center">
+                <p class="text-sm text-gray-600 mb-2">--- หรือ ---</p>
+                <button onclick="showPage('userRegister')" class="text-red-600 hover:text-red-700 font-medium text-sm">
+                    <i class="fas fa-user-plus mr-1"></i> สำหรับพนักงาน/ช่าง คลิกเพื่อลงทะเบียน
+                </button>
+            </div>
+        </div>
+
+        <div id="userRegister" class="w-full auth-container bg-white p-8 rounded-lg shadow-2xl border border-gray-200 hidden">
+            <h2 class="text-2xl font-bold text-gray-800 text-center mb-6"><i class="fas fa-clipboard-list text-red-600 mr-2"></i> ลงทะเบียน (พนักงาน/ช่าง)</h2>
+            <div class="space-y-4">
+                <div><label for="regUsername" class="block text-sm font-medium text-gray-700">ชื่อผู้ใช้ (Username)</label><input type="text" id="regUsername" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="กำหนดชื่อผู้ใช้งาน"></div>
+                <div><label for="regPassword" class="block text-sm font-medium text-gray-700">รหัสผ่าน (Password)</label><input type="password" id="regPassword" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="กำหนดรหัสผ่าน"></div>
+                <div><label for="regEmployeeId" class="block text-sm font-medium text-gray-700">รหัส ID พนักงาน</label><input type="text" id="regEmployeeId" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="รหัสพนักงาน (ตัวเลข)"></div>
+                <div><label for="regEmployeeName" class="block text-sm font-medium text-gray-700">ชื่อของพนักงาน</label><input type="text" id="regEmployeeName" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="ชื่อ-นามสกุล"></div>
+                <div><label for="regContactPhone" class="block text-sm font-medium text-gray-700">เบอร์โทรติดต่อ</label><input type="tel" id="regContactPhone" class="mt-1 block w-full border border-gray-300 rounded-md p-2" placeholder="08x-xxx-xxxx"></div>
+                <button onclick="registerUser()" class="w-full py-2 bg-red-600 text-white font-bold rounded shadow hover:bg-red-700 transition duration-150">ลงทะเบียนและเข้าสู่ระบบ</button>
+            </div>
+            <p class="mt-4 text-center"><button onclick="showPage('adminLogin')" class="text-gray-500 hover:text-gray-700 text-sm"><i class="fas fa-chevron-left mr-1"></i> กลับไปหน้าเข้าสู่ระบบ</button></p>
+        </div>
+
+        <div id="mainApp" class="container mx-auto max-w-5xl hidden">
+            <div class="bg-white rounded-lg shadow-md p-6 border-b-4 border-red-600 mb-6">
+                <h1 class="text-2xl font-bold text-gray-800 flex justify-between items-center">
+                    <span><i class="fas fa-list-alt mr-2"></i> ระบบจัดการงานซ่อม</span>
+                    <button onclick="logout()" class="text-sm font-normal text-gray-500 hover:text-red-600"><i class="fas fa-power-off mr-1"></i> ออกจากระบบ</button>
+                </h1>
+                <p class="text-gray-500 text-sm mt-1">ผู้ใช้งานปัจจุบัน: <span id="currentRole" class="font-bold"></span></p>
+                <div class="mt-4 flex space-x-3 border-t pt-3">
+                    <button id="btnListView" onclick="showJobListView()" class="px-4 py-2 bg-gray-400 text-gray-800 rounded-md font-semibold"><i class="fas fa-tasks mr-2"></i> รายการงาน</button>
+                    
+                    <button id="btnUserView" onclick="showUserListView()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-md font-semibold hover:bg-gray-300 hidden"><i class="fas fa-users mr-2"></i> รายชื่อช่าง</button>
+                    
+                    <button id="btnFormView" onclick="showFormView()" class="px-4 py-2 bg-red-600 text-white rounded-md font-semibold hover:bg-red-700 hidden"><i class="fas fa-plus-circle mr-2"></i> แจ้งงานใหม่</button>
+                </div>
+            </div>
+
+            <div id="jobListView" class="w-full">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-gray-800">รายการงานทั้งหมด</h2>
+                    <button id="btnClearAllData" onclick="confirmDataWipe()" 
+                            class="px-4 py-2 bg-red-700 text-white rounded-md font-semibold hover:bg-red-800 hidden">
+                        <i class="fas fa-trash-alt mr-2"></i> ล้างข้อมูลทั้งหมด
+                    </button>
+                </div>
+                <div id="jobsListContainer" class="space-y-4">
+                    </div>
+            </div>
+            
+            <div id="userListView" class="w-full hidden">
+                <h2 class="text-xl font-bold text-gray-800 mb-4"><i class="fas fa-users-cog mr-2 text-blue-600"></i> รายชื่อช่างที่ลงทะเบียน</h2>
+                <div id="userListContainer">
+                    </div>
+            </div>
+
+            <div id="jobDetailsView" class="w-full hidden bg-white p-6 rounded-lg shadow-lg">
+                <button onclick="showJobListView()" class="text-gray-600 hover:text-red-600 mb-4 font-medium"><i class="fas fa-chevron-left mr-1"></i> กลับไปหน้ารายการงาน</button>
+                <h2 class="text-2xl font-bold text-gray-800 border-b pb-2 mb-4">รายละเอียดงาน: <span id="detailJobId" class="text-red-600"></span></h2>
+                <div id="detailContent" class="space-y-4">
+                    </div>
+            </div>
+
+            <div id="repairFormView" class="w-full hidden">
+                <h2 class="text-xl font-bold text-gray-800 mb-4">แบบฟอร์มแจ้งงานซ่อมใหม่</h2>
+                <form id="repairForm" class="bg-white rounded-lg shadow-md p-6 space-y-6" onsubmit="event.preventDefault(); handleSubmit();">
+                    
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200"><h3 class="text-lg font-semibold text-red-600 mb-3">1. ข้อมูลช่างผู้ดำเนินการ</h3><div class="grid grid-cols-1 md:grid-cols-2 gap-4"><div><label class="block text-sm font-medium text-gray-700">รหัสช่าง (ID)</label><input type="text" id="formEmployeeId" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500" readonly></div><div><label class="block text-sm font-medium text-gray-700">ชื่อช่าง</label><input type="text" id="formEmployeeName" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500" readonly></div><div class="md:col-span-2"><label class="block text-sm font-medium text-gray-700">เบอร์ติดต่อ</label><input type="tel" id="formContactPhone" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500" readonly></div></div></div>
+
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200"><h3 class="text-lg font-semibold text-red-600 mb-3">2. ข้อมูลลูกค้าและวงจร</h3><div class="grid grid-cols-1 gap-4"><div><label class="block text-sm font-medium text-gray-700">Circuit ID / เลขสมาชิก TrueVisions</label><input type="text" id="circuitId" name="circuitId" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500" placeholder="ระบุเลข Circuit หรือ Member ID"></div><div><label class="block text-sm font-medium text-gray-700">ชื่อลูกค้า</label><input type="text" id="customerName" name="customerName" class="mt-1 block w-full border border-gray-300 rounded-md p-2 focus:ring-red-500 focus:border-red-500" placeholder="ชื่อลูกค้า"></div></div></div>
+
+                    <div class="bg-blue-50 p-4 rounded-lg border border-blue-200"><h3 class="text-lg font-semibold text-blue-800 mb-3">3. เลือกประเภทอุปกรณ์ที่ติดตั้ง</h3><div class="grid grid-cols-2 md:grid-cols-3 gap-3" id="deviceCheckboxes"><label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" value="Modem" class="form-checkbox h-5 w-5 text-red-600" onchange="renderDeviceInputs()"><span>Modem</span></label><label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" value="Mesh" class="form-checkbox h-5 w-5 text-red-600" onchange="renderDeviceInputs()"><span>Mesh</span></label><label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" value="TrueID" class="form-checkbox h-5 w-5 text-red-600" onchange="renderDeviceInputs()"><span>TrueID</span></label><label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" value="TrueINNO" class="form-checkbox h-5 w-5 text-red-600" onchange="renderDeviceInputs()"><span>TrueINNO</span></label><label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" value="TrueVision" class="form-checkbox h-5 w-5 text-red-600" onchange="renderDeviceInputs()"><span>True Vision</span></label><label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" value="CCTV" class="form-checkbox h-5 w-5 text-red-600" onchange="renderDeviceInputs()"><span>CCTV</span></label></div></div>
+                    
+                    <div id="dynamicInputsContainer" class="space-y-4"></div>
+
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200"><h3 class="text-lg font-semibold text-gray-700 mb-3">4. หลักฐานการติดตั้ง</h3><label class="block text-sm font-medium text-gray-700 mb-2">แนบรูป SN ของอุปกรณ์ชุดใหม่ (เลือกได้หลายรูป)</label><div class="flex items-center justify-center w-full"><label for="dropzone-file" class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100 transition"><div class="flex flex-col items-center justify-center pt-5 pb-6"><i class="fas fa-cloud-upload-alt text-3xl text-red-500 mb-2"></i><p class="text-sm text-gray-500">คลิก หรือลากไฟล์มาวางที่นี่</p></div><input id="dropzone-file" type="file" name="installImages" class="hidden" accept="image/*" multiple onchange="handleFiles(this.files)" /></label></div><div id="fileListContainer" class="mt-4 space-y-2 hidden"><h4 class="text-sm font-bold text-gray-600">ไฟล์ที่เลือก:</h4><ul id="fileList" class="space-y-2"></ul></div></div>
+
+                    <hr class="border-gray-300">
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" onclick="showJobListView()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400">ยกเลิก/กลับ</button>
+                        <button type="submit" class="px-6 py-2 bg-red-600 text-white font-bold rounded shadow hover:bg-red-700 transition duration-150">
+                            <i class="fas fa-save mr-2"></i> บันทึกงาน
+                        </button>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global Data Stores
+        let jobs = []; 
+        let selectedFiles = []; 
+        let currentRole = null;
+        let userData = {}; 
+        let registeredUsers = {};
+        let syncInterval = null;
+        
+        // *** รหัสผ่านสำหรับล้างข้อมูล: John-19195 ***
+        const WIPE_PASSWORD = 'John-19195'; 
+
+        // --- 0. Data Synchronization Functions ---
+
+        function saveJobs() {
+            localStorage.setItem('repairJobsData', JSON.stringify(jobs));
+        }
+
+        function loadJobs() {
+            const savedJobs = localStorage.getItem('repairJobsData');
+            if (savedJobs) {
+                try {
+                    jobs = JSON.parse(savedJobs);
+                } catch (e) {
+                    console.error("Error parsing jobs from local storage:", e);
+                    jobs = [];
+                }
+            } else {
+                jobs = [];
+            }
+        }
+        
+        function saveUsers() {
+            localStorage.setItem('registeredUsers', JSON.stringify(registeredUsers));
+        }
+
+        function loadUsers() {
+            const savedUsers = localStorage.getItem('registeredUsers');
+            if (savedUsers) {
+                try { registeredUsers = JSON.parse(savedUsers); } 
+                catch (e) { console.error("Error parsing users:", e); registeredUsers = {}; }
+            } else { registeredUsers = {}; }
+        }
+
+        // *** ฟังก์ชันแก้ไข: ล้างข้อมูลทั้งหมด (Jobs และ Users) และสร้าง Admin กลับมาใหม่ ***
+        function clearAllLocalStorageData() {
+            localStorage.removeItem('repairJobsData');
+            jobs = [];
+            localStorage.removeItem('registeredUsers'); 
+            registeredUsers = {}; 
+            
+            // สร้าง Admin กลับมาทันทีหลังลบ
+            registeredUsers['admin'] = { password: 'admin', id: 'ADM001', name: 'Admin System', phone: '090-000-0000', username: 'admin' };
+            saveUsers();
+            
+            console.log("ALL application data (Jobs and Users) has been CLEARED from Local Storage.");
+        }
+        
+        // *** NEW: ฟังก์ชันยืนยันรหัสผ่านสำหรับการล้างข้อมูล ***
+        function confirmDataWipe() {
+            if (currentRole !== 'admin') return; 
+            
+            const inputPass = prompt("⚠️ คำเตือน! การดำเนินการนี้จะลบข้อมูลงานซ่อมและรายชื่อช่างทั้งหมด\n\nโปรดป้อนรหัสผ่านสำหรับล้างข้อมูลเพื่อยืนยัน:");
+            
+            if (inputPass === WIPE_PASSWORD) {
+                clearAllLocalStorageData();
+                alert('✅ ล้างข้อมูลทั้งหมดเรียบร้อยแล้ว');
+                // โหลดข้อมูลใหม่หลังจากล้าง
+                loadJobs(); 
+                loadUsers(); 
+                renderJobsList();
+                showJobListView();
+            } else if (inputPass !== null) {
+                alert('❌ รหัสผ่านไม่ถูกต้อง การล้างข้อมูลถูกยกเลิก');
+            }
+        }
+
+        function startAdminSync() {
+            if (syncInterval) clearInterval(syncInterval); 
+            
+            syncInterval = setInterval(() => {
+                if (currentRole === 'admin' && !document.getElementById('jobListView').classList.contains('hidden')) { 
+                    const oldJobCount = jobs.length;
+                    loadJobs(); 
+                    if (jobs.length !== oldJobCount) {
+                        renderJobsList();
+                        console.log(`[Admin Sync] Found ${jobs.length - oldJobCount} new job(s). Updating list.`);
+                    }
+                }
+            }, 5000);
+        }
+
+        function stopAdminSync() {
+            if (syncInterval) {
+                clearInterval(syncInterval);
+                syncInterval = null;
+            }
+        }
+
+
+        // --- 1. View Management ---
+
+        function showPage(pageId) {
+            document.getElementById('authView').classList.add('hidden');
+            document.getElementById('userRegister').classList.add('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+
+            if (pageId === 'adminLogin') {
+                document.getElementById('authView').classList.remove('hidden');
+            } else if (pageId === 'userRegister') {
+                document.getElementById('userRegister').classList.remove('hidden');
+            } else if (pageId === 'mainApp') {
+                document.getElementById('mainApp').classList.remove('hidden');
+                showJobListView(); 
+            }
+        }
+        
+        function showUserListView() {
+            loadUsers(); 
+            
+            document.getElementById('jobListView').classList.add('hidden');
+            document.getElementById('repairFormView').classList.add('hidden');
+            document.getElementById('jobDetailsView').classList.add('hidden');
+            document.getElementById('userListView').classList.remove('hidden'); 
+            
+            // Update Button/Tab State
+            document.getElementById('btnListView').classList.add('bg-gray-200', 'text-gray-700');
+            document.getElementById('btnListView').classList.remove('bg-gray-400', 'text-gray-800');
+            document.getElementById('btnFormView').classList.add('hidden'); 
+            
+            const btnUserView = document.getElementById('btnUserView');
+            if (btnUserView) {
+                btnUserView.classList.remove('bg-gray-200', 'text-gray-700');
+                btnUserView.classList.add('bg-gray-400', 'text-gray-800');
+            }
+
+            renderUserList(); 
+        }
+
+        function showJobListView() {
+            loadJobs(); 
+            
+            document.getElementById('jobListView').classList.remove('hidden');
+            document.getElementById('repairFormView').classList.add('hidden');
+            document.getElementById('jobDetailsView').classList.add('hidden'); 
+            document.getElementById('userListView').classList.add('hidden'); 
+            
+            // Update Button/Tab State
+            document.getElementById('btnListView').classList.remove('bg-gray-200', 'text-gray-700');
+            document.getElementById('btnListView').classList.add('bg-gray-400', 'text-gray-800');
+            
+            const btnForm = document.getElementById('btnFormView');
+            if (currentRole === 'user') {
+                btnForm.classList.remove('hidden', 'bg-gray-400', 'text-gray-800');
+                btnForm.classList.add('bg-red-600', 'text-white');
+            } else {
+                btnForm.classList.add('hidden');
+            }
+            
+            const btnUserView = document.getElementById('btnUserView');
+            if (btnUserView) {
+                btnUserView.classList.add('bg-gray-200', 'text-gray-700');
+                btnUserView.classList.remove('bg-gray-400', 'text-gray-800');
+            }
+            
+            renderJobsList();
+        }
+
+        function showFormView() {
+            document.getElementById('jobListView').classList.add('hidden');
+            document.getElementById('jobDetailsView').classList.add('hidden');
+            document.getElementById('userListView').classList.add('hidden'); 
+            document.getElementById('repairFormView').classList.remove('hidden');
+            
+            // Update Button/Tab State
+            document.getElementById('btnListView').classList.remove('bg-gray-400', 'text-gray-800');
+            document.getElementById('btnListView').classList.add('bg-gray-200', 'text-gray-700');
+            document.getElementById('btnFormView').classList.remove('bg-red-600', 'text-white');
+            document.getElementById('btnFormView').classList.add('bg-gray-400', 'text-gray-800');
+            
+            const btnUserView = document.getElementById('btnUserView');
+            if (btnUserView) {
+                btnUserView.classList.add('bg-gray-200', 'text-gray-700');
+                btnUserView.classList.remove('bg-gray-400', 'text-gray-800');
+            }
+            
+            // 1. รีเซ็ตฟอร์ม
+            document.getElementById('repairForm').reset();
+            document.getElementById('dynamicInputsContainer').innerHTML = '';
+            document.getElementById('fileListContainer').classList.add('hidden');
+            
+            selectedFiles = []; 
+            renderFileList(); 
+            document.querySelectorAll('#deviceCheckboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
+            
+            // 2. เรียกฟังก์ชันเพื่อดึงข้อมูลช่างมาใส่ในฟอร์มทันที
+            fillTechnicianForm();
+        }
+
+        function showJobDetails(jobId) {
+            loadJobs(); 
+            const job = jobs.find(j => j.id === jobId);
+            if (!job) {
+                alert('ไม่พบรายการงาน');
+                return;
+            }
+
+            document.getElementById('jobListView').classList.add('hidden');
+            document.getElementById('repairFormView').classList.add('hidden');
+            document.getElementById('userListView').classList.add('hidden'); 
+            document.getElementById('jobDetailsView').classList.remove('hidden');
+
+            document.getElementById('detailJobId').innerText = job.id;
+            const detailContent = document.getElementById('detailContent');
+            
+            let devicesHtml = '<ul class="space-y-3">';
+            if (job.SNs && job.SNs.length > 0) {
+                 // Group SNs by device type
+                const groupedSNs = job.SNs.reduce((acc, sn) => {
+                    const key = sn.device;
+                    if (!acc[key]) {
+                        acc[key] = [];
+                    }
+                    acc[key].push(sn);
+                    return acc;
+                }, {});
+
+                for (const device in groupedSNs) {
+                    devicesHtml += `<li>
+                        <strong class="text-md text-red-600">${device}:</strong>
+                        <ul class="ml-4 list-disc text-gray-700 space-y-1 mt-1">`;
+                    
+                    groupedSNs[device].forEach((snEntry, index) => {
+                        let snDetails = `SN ${snEntry.sn}`;
+                        if (snEntry.csky) snDetails += `, C-SKY: ${snEntry.csky}`;
+                        if (snEntry.cHDATV) snDetails += `, C-HD ATV: ${snEntry.cHDATV}`;
+                        devicesHtml += `<li>ชุดที่ ${index + 1}: ${snDetails}</li>`;
+                    });
+
+                    devicesHtml += `</ul></li>`;
+                }
+
+            } else {
+                devicesHtml += `<li class="ml-4 text-gray-500 italic">ไม่มีข้อมูล SN</li>`;
+            }
+            devicesHtml += '</ul>';
+            
+            let imagesHtml = '';
+            if (job.imageFiles && job.imageFiles.length > 0) {
+                imagesHtml = `
+                    <h4 class="font-bold text-gray-700 mt-2 mb-2">รูปภาพที่แนบ:</h4>
+                    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-2">
+                `;
+                job.imageFiles.forEach(imageData => {
+                    if (imageData.dataUrl && imageData.dataUrl.startsWith('data:image')) {
+                        imagesHtml += `
+                            <div class="relative group bg-gray-100 p-2 rounded-lg shadow-sm flex flex-col items-center justify-center border border-gray-200">
+                                <img src="${imageData.dataUrl}" alt="${imageData.name}" class="image-thumbnail">
+                                <div class="text-xs text-gray-600 mt-2 truncate w-full text-center">${imageData.name}</div>
+                                <a href="${imageData.dataUrl}" download="${imageData.name}" 
+                                   class="absolute bottom-2 right-2 p-1 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                                   title="คลิกเพื่อดาวน์โหลดรูปภาพต้นฉบับ">
+                                    <i class="fas fa-download text-xs"></i>
+                                </a>
+                            </div>
+                        `;
+                    } else {
+                        imagesHtml += `
+                            <div class="bg-gray-100 p-2 rounded-lg shadow-sm flex flex-col items-center justify-center border border-gray-200 text-center text-sm text-gray-500">
+                                <i class="far fa-file-image text-gray-400 mb-1 text-xl"></i>
+                                <span>${imageData.name || 'ไฟล์รูปภาพ (เสียหาย)'}</span>
+                            </div>
+                        `;
+                    }
+                });
+                imagesHtml += `</div>`;
+            } else {
+                imagesHtml = `<p class="text-gray-500 italic text-sm">ไม่มีไฟล์หลักฐานถูกแนบมา</p>`;
+            }
+
+
+            const statusText = job.status === 'pending' ? 'กำลังดำเนินการ' : 'ดำเนินการเสร็จสิ้น';
+            const statusColor = job.status === 'pending' ? 'bg-orange-500' : 'bg-green-600';
+            
+            let completeButtonHtml = '';
+            if (currentRole === 'admin' && job.status === 'pending') {
+                completeButtonHtml = `
+                    <button 
+                        onclick="completeJob(${job.id}); showJobListView()" 
+                        class="mt-4 px-6 py-2 bg-green-600 text-white font-bold rounded shadow hover:bg-green-700 transition w-full"
+                    >
+                        <i class="fas fa-check-circle mr-2"></i> ดำเนินการเสร็จสิ้น
+                    </button>
+                `;
+            }
+
+            detailContent.innerHTML = `
+                <div class="grid grid-cols-2 gap-6 bg-gray-50 p-4 rounded-lg border">
+                    <div>
+                        <p class="text-sm font-bold text-gray-600">สถานะงาน:</p>
+                        <span class="px-3 py-1 text-white font-bold rounded-full ${statusColor} text-sm">${statusText}</span>
+                    </div>
+                    <div>
+                        <p class="text-sm font-bold text-gray-600">รหัส Circuit/สมาชิก:</p>
+                        <p class="text-lg font-semibold text-gray-800">${job.circuitId}</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-lg shadow-sm border">
+                    <h3 class="text-lg font-bold text-red-600 mb-2"><i class="fas fa-user-circle mr-2"></i> ข้อมูลลูกค้า</h3>
+                    <div class="grid grid-cols-1 gap-4 text-sm">
+                        <p>ชื่อลูกค้า: <span class="font-semibold">${job.customerName}</span></p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-lg shadow-sm border">
+                    <h3 class="text-lg font-bold text-blue-600 mb-2"><i class="fas fa-tools mr-2"></i> ข้อมูลช่างและอุปกรณ์</h3>
+                    <div class="grid grid-cols-2 gap-4 text-sm">
+                        <p>ช่างผู้ดำเนินการ: <span class="font-semibold">${job.technicianName}</span></p>
+                        <p>รหัสช่าง: <span class="font-semibold">${job.technicianId}</span></p>
+                    </div>
+                    <h4 class="font-bold text-gray-700 mt-4 mb-2">อุปกรณ์และ SN ที่ติดตั้ง:</h4>
+                    ${devicesHtml}
+                </div>
+
+                <div class="bg-white p-4 rounded-lg shadow-sm border">
+                    <h3 class="text-lg font-bold text-gray-600 mb-2"><i class="fas fa-camera mr-2"></i> รูปภาพหลักฐาน</h3>
+                    ${imagesHtml}
+                </div>
+
+                ${completeButtonHtml}
+            `;
+        }
+
+        // --- 2. Authentication Logic ---
+
+        function unifiedLogin() {
+            loadUsers(); 
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            if (username === 'admin' && password === 'admin') {
+                currentRole = 'admin';
+                userData = { id: 'ADM001', name: 'Admin System', phone: '090-000-0000', username: username };
+                // ตรวจสอบให้แน่ใจว่า Admin มีอยู่ใน registeredUsers เสมอ
+                if (!registeredUsers[username]) {
+                    registeredUsers[username] = { password: password, id: 'ADM001', name: 'Admin System', phone: '090-000-0000', username: username };
+                    saveUsers(); 
+                }
+                setupMainApp();
+                return;
+            }
+
+            const registeredUser = registeredUsers[username];
+            if (registeredUser && registeredUser.password === password) {
+                currentRole = 'user';
+                userData = { id: registeredUser.id, name: registeredUser.name, phone: registeredUser.phone, username: username };
+                setupMainApp();
+                return;
+            }
+
+            alert('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่');
+        }
+        
+        function registerUser() {
+            loadUsers(); 
+            const user = document.getElementById('regUsername').value.trim();
+            const password = document.getElementById('regPassword').value;
+            const id = document.getElementById('regEmployeeId').value.trim();
+            const name = document.getElementById('regEmployeeName').value.trim();
+            const phone = document.getElementById('regContactPhone').value.trim();
+
+            if (user && password && id && name && phone) {
+                if (registeredUsers[user]) {
+                    alert('ชื่อผู้ใช้งานนี้ถูกลงทะเบียนแล้ว กรุณาใช้ชื่ออื่น');
+                    return;
+                }
+                
+                registeredUsers[user] = { password: password, id: id, name: name, phone: phone, username: user };
+                saveUsers(); 
+                
+                currentRole = 'user';
+                userData = { id: id, name: name, phone: phone, username: user };
+                alert(`ลงทะเบียนสำเร็จ! ยินดีต้อนรับคุณ ${name}`);
+                setupMainApp();
+            } else {
+                alert('กรุณากรอกข้อมูลการลงทะเบียนให้ครบถ้วน');
+            }
+        }
+
+        function logout() {
+            currentRole = null;
+            userData = {};
+            document.getElementById('username').value = ''; 
+            document.getElementById('password').value = ''; 
+            alert('ออกจากระบบเรียบร้อย');
+            showPage('adminLogin');
+            
+            stopAdminSync(); 
+            
+            document.getElementById('repairForm').reset();
+            document.getElementById('dynamicInputsContainer').innerHTML = '';
+            document.getElementById('fileListContainer').classList.add('hidden');
+            
+            selectedFiles = []; 
+            renderFileList(); 
+        }
+
+        function fillTechnicianForm() {
+            document.getElementById('formEmployeeId').value = userData.id || '';
+            document.getElementById('formEmployeeName').value = userData.name || '';
+            document.getElementById('formContactPhone').value = userData.phone || '';
+        }
+
+        // *** ฟังก์ชัน setupMainApp: จัดการการแสดงผลปุ่ม Admin ***
+        function setupMainApp() {
+            loadUsers(); 
+
+            if (currentRole === 'admin') {
+                loadJobs(); 
+                
+                // แสดงปุ่ม Admin
+                const userViewButton = document.getElementById('btnUserView');
+                if(userViewButton) userViewButton.classList.remove('hidden');
+                
+                const clearButton = document.getElementById('btnClearAllData');
+                if(clearButton) clearButton.classList.remove('hidden');
+            } else {
+                // ซ่อนปุ่ม Admin ทั้งหมดสำหรับ User
+                const userViewButton = document.getElementById('btnUserView');
+                if(userViewButton) userViewButton.classList.add('hidden');
+                
+                const clearButton = document.getElementById('btnClearAllData');
+                if(clearButton) clearButton.classList.add('hidden');
+            }
+            
+            document.getElementById('currentRole').innerText = `${userData.name} (${currentRole === 'admin' ? 'ผู้ดูแลระบบ' : userData.id})`;
+            fillTechnicianForm(); 
+            showPage('mainApp');
+            
+            if (currentRole === 'admin') {
+                startAdminSync();
+            } else {
+                stopAdminSync();
+            }
+        }
+
+        // --- 3. Job List & User List Management ---
+
+        function renderJobsList() {
+            const container = document.getElementById('jobsListContainer');
+            container.innerHTML = '';
+            
+            let filteredJobs = [];
+
+            if (currentRole === 'admin') {
+                filteredJobs = jobs; 
+            } else if (currentRole === 'user') {
+                filteredJobs = jobs.filter(job => job.technicianId === userData.id);
+            }
+
+            if (filteredJobs.length === 0) {
+                container.innerHTML = '<p class="p-6 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 rounded">ยังไม่มีรายการงานในขณะนี้</p>';
+                return;
+            }
+
+            filteredJobs.sort((a, b) => b.id - a.id);
+
+            filteredJobs.forEach(job => {
+                const isPending = job.status === 'pending';
+                const statusColor = isPending ? 'bg-orange-100 text-orange-800 border-orange-500' : 'bg-green-100 text-green-800 border-green-500';
+                const statusText = isPending ? 'กำลังดำเนินการ' : 'ดำเนินการเสร็จสิ้น';
+                const statusIcon = isPending ? 'fas fa-sync-alt' : 'fas fa-check-circle';
+                
+                let actionButton = '';
+                if (currentRole === 'admin' && isPending) {
+                    actionButton = `<button onclick="event.stopPropagation(); completeJob(${job.id})" class="px-4 py-1.5 bg-green-600 text-white rounded font-semibold hover:bg-green-700 transition"><i class="fas fa-check"></i> ดำเนินการเสร็จสิ้น</button>`;
+                }
+
+                const jobCard = document.createElement('div');
+                jobCard.onclick = () => showJobDetails(job.id); 
+                jobCard.className = `job-card bg-white p-5 rounded-lg shadow-md border-l-4 ${isPending ? 'border-l-orange-500' : 'border-l-green-600'} flex justify-between items-center`;
+                jobCard.innerHTML = `
+                    <div class="flex-grow">
+                        <p class="text-sm font-light text-gray-500">หมายเลขงาน: ${job.id}</p>
+                        <p class="text-lg font-bold text-gray-800">${job.customerName} <span class="text-sm font-normal text-gray-500 ml-2">(${job.circuitId})</span></p>
+                        <p class="text-xs text-gray-600 mt-1">ช่าง: ${job.technicianName} | อุปกรณ์: ${job.devices ? job.devices.join(', ') : 'N/A'}</p>
+                    </div>
+                    <div class="text-right space-y-2 ml-4">
+                        <div class="px-3 py-1 text-sm font-semibold rounded-full ${statusColor} border">
+                            <i class="${statusIcon} mr-1"></i> ${statusText}
+                        </div>
+                        ${actionButton}
+                    </div>
+                `;
+                container.appendChild(jobCard);
+            });
+        }
+        
+        function completeJob(jobId) {
+            const jobIndex = jobs.findIndex(job => job.id === jobId);
+            if (jobIndex > -1) {
+                jobs[jobIndex].status = 'completed';
+                saveJobs(); 
+                alert(`งานหมายเลข ${jobId} ถูกทำเครื่องหมายว่า "ดำเนินการเสร็จสิ้น" แล้ว`);
+                renderJobsList();
+            }
+        }
+        
+        // *** ฟังก์ชันแก้ไข: renderUserList (ตัด Admin ออกทั้งหมด) ***
+        function renderUserList() {
+            const container = document.getElementById('userListContainer');
+            const userArray = Object.values(registeredUsers);
+            
+            // กรองบัญชี Admin ออกจากลิสต์ (username: 'admin') และกรองผู้ใช้ที่ข้อมูลไม่สมบูรณ์
+            const technicians = userArray.filter(user => {
+                return user.username !== 'admin' && user.name && user.id;
+            });
+            
+            container.innerHTML = '';
+            
+            // Header/Summary - นับเฉพาะช่างที่กรองแล้วเท่านั้น
+            container.innerHTML += `<div class="p-4 bg-blue-100 border-l-4 border-blue-500 text-blue-800 rounded mb-4">
+                <h3 class="text-xl font-bold"><i class="fas fa-users-cog mr-2"></i> รายการช่างที่ลงทะเบียน:</h3>
+                <p class="text-sm mt-1">จำนวนช่างทั้งหมด: <span class="font-bold text-lg">${technicians.length}</span> คน</p>
+            </div>`;
+            
+            if (technicians.length === 0) {
+                container.innerHTML += '<p class="p-6 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 rounded">ยังไม่มีช่างลงทะเบียน</p>';
+                return;
+            }
+
+            // Table Start
+            let tableHtml = `<div class="bg-white shadow-md rounded-lg overflow-hidden"><table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อช่าง</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">รหัสช่าง (ID)</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ชื่อผู้ใช้</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">เบอร์โทรศัพท์</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">`;
+
+            // Table Rows
+            technicians.forEach((tech, index) => {
+                const rowClass = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                tableHtml += `
+                    <tr class="${rowClass}">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${tech.name || 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${tech.id || 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${tech.username || 'N/A'}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${tech.phone || 'N/A'}</td>
+                    </tr>
+                `;
+            });
+
+            tableHtml += `</tbody></table></div>`;
+            
+            container.innerHTML += tableHtml;
+        }
+
+
+        // --- 4. Form Submission Logic ---
+
+        async function handleSubmit() {
+            if (!validateForm()) return; 
+
+            loadJobs(); 
+            const id = jobs.length > 0 ? jobs[jobs.length - 1].id + 1 : 1001;
+            
+            const imagesToSave = selectedFiles.map(f => ({ 
+                name: f.name, 
+                dataUrl: f.dataUrl 
+            }));
+
+            const newJob = {
+                id: id,
+                customerName: document.getElementById('customerName').value.trim(),
+                circuitId: document.getElementById('circuitId').value.trim(),
+                technicianId: userData.id,
+                technicianName: userData.name,
+                status: 'pending',
+                devices: Array.from(document.querySelectorAll('#deviceCheckboxes input[type="checkbox"]:checked')).map(cb => cb.value),
+                SNs: getSNData(), 
+                imageFiles: imagesToSave, 
+            };
+            
+            jobs.push(newJob);
+            saveJobs(); 
+
+            alert(`บันทึกงานหมายเลข ${id} เรียบร้อย สถานะ: กำลังดำเนินการ`);
+            
+            document.getElementById('repairForm').reset();
+            document.getElementById('dynamicInputsContainer').innerHTML = '';
+            document.getElementById('fileListContainer').classList.add('hidden');
+            
+            selectedFiles = []; 
+            renderFileList(); 
+            
+            document.querySelectorAll('#deviceCheckboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
+
+            showJobListView(); 
+        }
+
+
+        // --- 5. Supporting Form Functions (SN/Image Handling) ---
+        
+        // *** ฟังก์ชันแก้ไข: getSNData (อ่านข้อมูลจาก Input Group หลายชุด) ***
+        function getSNData() {
+            const SNs = [];
+            
+            // วนลูปอ่านข้อมูลจาก Input Field ทั้งหมด
+            document.querySelectorAll('.inputs-wrapper').forEach(wrapper => {
+                const deviceType = wrapper.dataset.deviceType;
+
+                // วนลูปตาม Input Group (ชุดอุปกรณ์)
+                wrapper.querySelectorAll('.input-group').forEach(group => {
+                    const snEntry = { device: deviceType, sn: '', csky: '', cHDATV: '' };
+                    
+                    let hasData = false;
+                    
+                    // หา Input Fields ภายใน Group นี้
+                    group.querySelectorAll('input').forEach(input => {
+                        const snType = input.dataset.snType;
+                        const value = input.value.trim();
+                        
+                        if (value) {
+                            snEntry[snType] = value;
+                            hasData = true;
+                        }
+                    });
+
+                    // บันทึกเฉพาะชุดที่มีข้อมูล SN/ID อย่างน้อย 1 ช่อง
+                    if (hasData) {
+                        SNs.push(snEntry);
+                    }
+                });
+            });
+
+            return SNs;
+        }
+
+        // *** ฟังก์ชันแก้ไข: validateForm (ตรวจสอบ Input Group หลายชุด) ***
+        function validateForm() {
+            const circuitId = document.getElementById('circuitId').value;
+            const customerName = document.getElementById('customerName').value;
+            const selectedCheckboxes = document.querySelectorAll('#deviceCheckboxes input[type="checkbox"]:checked');
+            const selectedDevices = Array.from(selectedCheckboxes).map(cb => cb.value);
+
+            let formValid = true;
+            document.getElementById('circuitId').classList.remove('input-error');
+            document.getElementById('customerName').classList.remove('input-error');
+            
+            if (!circuitId.trim()) {
+                document.getElementById('circuitId').classList.add('input-error'); formValid = false;
+            }
+            if (!customerName.trim()) {
+                document.getElementById('customerName').classList.add('input-error'); formValid = false;
+            }
+            
+            if (!formValid) {
+                alert('กรุณากรอก Circuit ID และ ชื่อลูกค้าให้ครบถ้วน');
+                return false;
+            }
+
+            if (selectedDevices.length === 0) {
+                alert('กรุณาเลือกอุปกรณ์อย่างน้อย 1 อย่าง');
+                return false;
+            }
+
+            let allSNsFilled = true;
+            const deviceCards = document.querySelectorAll('#dynamicInputsContainer > .device-card');
+            
+            deviceCards.forEach(card => card.classList.remove('border-red-500'));
+            
+            // ตรวจสอบ SNs ใน Input Group หลายชุด
+            document.querySelectorAll('.inputs-wrapper').forEach(wrapper => {
+                const deviceType = wrapper.dataset.deviceType;
+                const card = wrapper.closest('.device-card');
+                
+                let cardHasError = false;
+
+                wrapper.querySelectorAll('.input-group').forEach(group => {
+                    let groupHasError = false;
+                    
+                    const snInput = group.querySelector(`input[data-sn-type="sn"]`);
+                    const cHDATVInput = group.querySelector(`input[data-sn-type="cHDATV"]`);
+                    const cskyInput = group.querySelector(`input[data-sn-type="csky"]`);
+                    
+                    if (snInput) {
+                        const snValue = snInput.value.trim();
+                        snInput.classList.remove('input-error');
+                        if (!snValue) { groupHasError = true; snInput.classList.add('input-error'); }
+                    }
+                    
+                    if (cHDATVInput) {
+                        const atvValue = cHDATVInput.value.trim();
+                        cHDATVInput.classList.remove('input-error');
+                        if (!atvValue && deviceType === 'TrueINNO') { groupHasError = true; cHDATVInput.classList.add('input-error'); }
+                    }
+
+                    if (cskyInput) {
+                        const skyValue = cskyInput.value.trim();
+                        cskyInput.classList.remove('input-error');
+                        if (!skyValue && deviceType === 'TrueVision') { groupHasError = true; cskyInput.classList.add('input-error'); }
+                    }
+                    
+                    if (groupHasError) {
+                        allSNsFilled = false;
+                        cardHasError = true;
+                    }
+                });
+                
+                if (cardHasError) {
+                    card.classList.add('border-red-500');
+                } else {
+                    card.classList.remove('border-red-500');
+                }
+            });
+
+            if (!allSNsFilled) {
+                alert('กรุณากรอกข้อมูล SN/C-SKY/C-HD ATV ในช่องที่ถูกไฮไลท์ (กรอบสีแดง) ให้ครบถ้วน');
+                return false;
+            }
+
+            return true;
+        }
+
+        // *** ฟังก์ชันแก้ไข: renderDeviceInputs (สร้าง Input Group 1 ชุดเริ่มต้น พร้อมปุ่มเพิ่ม) ***
+        function renderDeviceInputs() {
+            const container = document.getElementById('dynamicInputsContainer');
+            container.innerHTML = ''; 
+            const checkboxes = document.querySelectorAll('#deviceCheckboxes input[type="checkbox"]:checked');
+            if (checkboxes.length > 0) {
+                const header = document.createElement('div');
+                header.className = "text-md font-bold text-gray-700 mt-4 mb-2";
+                header.innerText = "กรุณากรอก/สแกน SN อุปกรณ์ที่เลือก:";
+                container.appendChild(header);
+            }
+            checkboxes.forEach((cb) => {
+                const deviceType = cb.value;
+                const card = document.createElement('div');
+                card.className = "device-card bg-white border border-l-4 border-l-blue-500 border-gray-200 p-4 rounded shadow-sm";
+                card.dataset.deviceType = deviceType; 
+                
+                // Dynamic Container สำหรับเก็บ Input Groups ทั้งหมด
+                card.innerHTML = `<h4 class="font-bold text-blue-600 mb-2"><i class="fas fa-box mr-1"></i> ${deviceType}</h4>
+                                <div class="inputs-wrapper space-y-4" data-device-type="${deviceType}">
+                                    ${createInputGroup(deviceType, 0)}
+                                </div>
+                                <button type="button" 
+                                        onclick="addDeviceInput('${deviceType}')" 
+                                        class="mt-3 px-4 py-1.5 bg-gray-200 text-gray-700 rounded-md font-semibold hover:bg-gray-300 text-sm">
+                                    <i class="fas fa-plus mr-1"></i> เพิ่ม SN / ID ${deviceType}
+                                </button>`;
+                container.appendChild(card);
+            });
+        }
+        
+        // *** ฟังก์ชันแก้ไข: createInputGroup (สร้าง Input Group 1 ชุดตาม index) ***
+        function createInputGroup(device, index) {
+            let inputsHtml = '';
+
+            // 1. SN (Serial Number) - ต้องมีสำหรับทุกอุปกรณ์
+            inputsHtml += createSingleInput(device, index, "SN (Serial Number)", "sn", "สแกน SN อุปกรณ์", true);
+            
+            // 2. C-HD ATV (สำหรับ TrueINNO)
+            if (device === 'TrueINNO') {
+                inputsHtml += createSingleInput(device, index, "C-HD ATV", "cHDATV", "สแกน C-HD ATV", true);
+            }
+            
+            // 3. C-SKY (สำหรับ TrueVision)
+            if (device === 'TrueVision') {
+                inputsHtml += createSingleInput(device, index, "C-SKY", "csky", "สแกน C-SKY", true);
+            }
+
+            // Wrap the inputs and add a remove button
+            const removeButton = index > 0 ? `<button type="button" class="ml-2 text-red-500 hover:text-red-700 text-lg" onclick="removeDeviceInput(this)"><i class="fas fa-times-circle"></i></button>` : '';
+
+            return `<div class="input-group grid grid-cols-1 md:grid-cols-2 gap-4 border p-3 rounded-lg bg-gray-100" data-index="${index}">
+                        <div class="md:col-span-2 flex justify-between items-center border-b pb-2 mb-2">
+                            <span class="text-sm font-bold text-gray-700">ชุดอุปกรณ์ #${index + 1}</span>
+                            ${removeButton}
+                        </div>
+                        ${inputsHtml}
+                    </div>`;
+        }
+
+        // ฟังก์ชันย่อยสำหรับสร้าง input field เดี่ยว
+        function createSingleInput(device, index, label, snType, placeholder, isRequired) {
+            const requiredMark = isRequired ? '<span class="text-red-500">*</span>' : '';
+            const nameAttr = `${device}-${snType}-${index}`; // ชื่อ input แยกตาม index
+
+            return `<div class="relative"><label class="block text-xs font-bold text-gray-600 mb-1">${label} ${requiredMark}</label><div class="flex"><input type="text" name="${nameAttr}" data-sn-type="${snType}" data-device="${device}" data-index="${index}" class="sn-input block w-full border border-gray-300 rounded-l-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="${placeholder}"><button type="button" class="bg-blue-600 text-white px-3 rounded-r-md hover:bg-blue-700 text-sm flex items-center" onclick="simulateScan(this)"><i class="fas fa-barcode mr-1"></i> Scan</button></div></div>`;
+        }
+        
+        // *** ฟังก์ชันใหม่: addDeviceInput (เพิ่มชุดสแกน) ***
+        function addDeviceInput(deviceType) {
+            const wrapper = document.querySelector(`.inputs-wrapper[data-device-type="${deviceType}"]`);
+            if (!wrapper) return;
+            
+            // หา index ถัดไป
+            const existingInputs = wrapper.querySelectorAll('.input-group');
+            const newIndex = existingInputs.length; 
+            
+            const newGroup = createInputGroup(deviceType, newIndex);
+            wrapper.insertAdjacentHTML('beforeend', newGroup);
+        }
+
+        // *** ฟังก์ชันใหม่: removeDeviceInput (ลบชุดสแกน) ***
+        function removeDeviceInput(button) {
+            const groupToRemove = button.closest('.input-group');
+            if (groupToRemove) {
+                groupToRemove.remove();
+                
+                // จัดเรียง Index ใหม่
+                const wrapper = groupToRemove.closest('.inputs-wrapper');
+                const remainingGroups = wrapper.querySelectorAll('.input-group');
+                
+                remainingGroups.forEach((group, index) => {
+                    group.dataset.index = index;
+                    
+                    // อัปเดต Title
+                    group.querySelector('span').innerText = `ชุดอุปกรณ์ #${index + 1}`;
+                    
+                    // อัปเดต data-index และ name attribute ใน Input Fields
+                    group.querySelectorAll('input').forEach(input => {
+                        input.dataset.index = index;
+                        const oldName = input.getAttribute('name');
+                        const parts = oldName.split('-'); 
+                        if (parts.length >= 3) {
+                            const newName = `${parts[0]}-${parts[1]}-${index}`;
+                            input.setAttribute('name', newName);
+                        }
+                    });
+
+                    // จัดการปุ่มลบ (แสดงเฉพาะชุดที่ 2 เป็นต้นไป)
+                    const removeBtnContainer = group.querySelector('.flex.justify-between');
+                    if(removeBtnContainer && index === 0) {
+                        // ถ้าเป็นชุดแรก ให้มั่นใจว่าไม่มีปุ่มลบ
+                        let removeBtn = removeBtnContainer.querySelector('.fa-times-circle');
+                        if (removeBtn) {
+                            removeBtn.closest('button').remove();
+                        }
+                    } else if (removeBtnContainer && index > 0) {
+                         // ถ้าไม่ใช่ชุดแรก และยังไม่มีปุ่ม ให้เพิ่มปุ่มลบ
+                        let removeBtn = removeBtnContainer.querySelector('.fa-times-circle');
+                        if (!removeBtn) {
+                            removeBtnContainer.innerHTML += `<button type="button" class="ml-2 text-red-500 hover:text-red-700 text-lg" onclick="removeDeviceInput(this)"><i class="fas fa-times-circle"></i></button>`;
+                        }
+                    }
+                });
+            }
+        }
+        
+        function simulateScan(btn) {
+            const input = btn.previousElementSibling;
+            input.focus();
+            let prefix = 'SCAN';
+            if (input.dataset.snType === 'cHDATV') prefix = 'ATV';
+            if (input.dataset.snType === 'csky') prefix = 'SKY';
+
+            input.value = `${prefix}-${Math.floor(Math.random() * 10000000)}`;
+            input.classList.add('bg-green-50');
+            setTimeout(() => {
+                input.classList.remove('bg-green-50');
+                input.classList.remove('input-error');
+                
+                // ตรวจสอบความถูกต้องของ Card หลังจากสแกน
+                const card = input.closest('.device-card');
+                if (card) {
+                    // ตรวจสอบว่ายังมี error ใน Card นี้หรือไม่
+                    const remainingErrors = card.querySelectorAll('.sn-input.input-error').length;
+                    if (remainingErrors === 0) {
+                        card.classList.remove('border-red-500');
+                    }
+                }
+            }, 500);
+        }
+        
+        function handleFiles(files) {
+            const filesArray = Array.from(files);
+
+            const newImageFiles = filesArray.filter(file => {
+                const isImage = file.type.startsWith('image/');
+                const isDuplicate = selectedFiles.some(f => f.name === file.name && f.file.size === file.size); 
+                return isImage && !isDuplicate;
+            });
+
+            if (newImageFiles.length === 0) {
+                renderFileList();
+                return;
+            }
+            
+            newImageFiles.forEach(file => {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    selectedFiles.push({
+                        file: file, 
+                        name: file.name,
+                        dataUrl: e.target.result 
+                    });
+                    renderFileList(); 
+                };
+                reader.onerror = (error) => {
+                    console.error('Error reading file:', error);
+                    alert(`เกิดข้อผิดพลาดในการอ่านไฟล์: ${file.name}`);
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+        
+        function renderFileList() {
+            const fileListContainer = document.getElementById('fileListContainer');
+            const fileList = document.getElementById('fileList');
+            
+            fileList.innerHTML = '';
+
+            if (selectedFiles.length > 0) {
+                fileListContainer.classList.remove('hidden');
+            } else {
+                fileListContainer.classList.add('hidden');
+            }
+            
+            selectedFiles.forEach((fileEntry, index) => {
+                const li = document.createElement('li');
+                li.className = "flex justify-between items-center bg-white p-2 rounded border shadow-sm text-sm";
+                li.innerHTML = `<span class="truncate flex items-center"><i class="far fa-image text-blue-500 mr-2"></i> ${fileEntry.name}</span><button type="button" class="text-red-500 hover:text-red-700 ml-2" onclick="removeFile(${index})"><i class="fas fa-times-circle"></i></button>`;
+                fileList.appendChild(li);
+            });
+        }
+        
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            renderFileList(); 
+            if (selectedFiles.length === 0) {
+                document.getElementById('dropzone-file').value = ''; 
+            }
+        }
+
+        // Set default view on load
+        document.addEventListener('DOMContentLoaded', () => {
+            loadJobs(); 
+            loadUsers(); 
+            
+            // ตรวจสอบและสร้างบัญชี Admin ถ้ายังไม่มี
+            if (!registeredUsers['admin']) {
+                registeredUsers['admin'] = { password: 'admin', id: 'ADM001', name: 'Admin System', phone: '090-000-0000', username: 'admin' };
+                saveUsers();
+            }
+            
+            showPage('adminLogin');
+            document.getElementById('username').value = '';
+            document.getElementById('password').value = '';
+        });
+    </script>
+    </body>
+</html>
