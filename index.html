@@ -25,7 +25,25 @@
             border: 1px solid #e5e7eb;
         }
     </style>
-</head>
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+    <script>
+      // ******** ข้อมูลการเชื่อมต่อ Firebase จาก Project Hatyai-TrueTech-East ********
+      const firebaseConfig = {
+        apiKey: "AIzaSyA1PMuLi6kFJNoj7QmCE978ukr2rfsqe8", 
+        authDomain: "hatyai-truetech-east.firebaseapp.com",
+        projectId: "hatyai-truetech-east", 
+        storageBucket: "hatyai-truetech-east.appspot.com",
+        messagingSenderId: "825685781102", 
+        appId: "1:825685781102:web:c7fdc1448bc4fc4074947f"
+      };
+
+      // Initialize Firebase และ Firestore Database
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.firestore();
+    </script>
+    </head>
 <body>
 
     <div class="container mx-auto p-6 flex justify-center items-center min-h-screen">
@@ -144,64 +162,119 @@
         // *** รหัสผ่านสำหรับล้างข้อมูล: John-19195 ***
         const WIPE_PASSWORD = 'John-19195'; 
 
-        // --- 0. Data Synchronization Functions ---
-
-        function saveJobs() {
-            localStorage.setItem('repairJobsData', JSON.stringify(jobs));
-        }
-
-        function loadJobs() {
-            const savedJobs = localStorage.getItem('repairJobsData');
-            if (savedJobs) {
-                try {
-                    jobs = JSON.parse(savedJobs);
-                } catch (e) {
-                    console.error("Error parsing jobs from local storage:", e);
-                    jobs = [];
-                }
-            } else {
-                jobs = [];
+        // --- 0. Data Synchronization Functions (Firebase Firestore) ---
+        
+        // NEW: Load Jobs from Firebase
+        async function loadJobs() {
+            try {
+                // ดึงงานทั้งหมด จัดเรียงตาม ID 
+                const snapshot = await db.collection("jobs").orderBy("id", "asc").get();
+                jobs = snapshot.docs.map(doc => doc.data());
+                console.log("Jobs loaded from Firebase:", jobs.length);
+            } catch (error) {
+                console.error("Error loading jobs from Firebase:", error);
+                // ไม่มีการสำรอง LocalStorage อีกต่อไปเพื่อบังคับใช้ Cloud Sync
+                jobs = []; 
             }
         }
         
-        function saveUsers() {
-            localStorage.setItem('registeredUsers', JSON.stringify(registeredUsers));
-        }
-
-        function loadUsers() {
-            const savedUsers = localStorage.getItem('registeredUsers');
-            if (savedUsers) {
-                try { registeredUsers = JSON.parse(savedUsers); } 
-                catch (e) { console.error("Error parsing users:", e); registeredUsers = {}; }
-            } else { registeredUsers = {}; }
-        }
-
-        // *** ฟังก์ชันแก้ไข: ล้างข้อมูลทั้งหมด (Jobs และ Users) และสร้าง Admin กลับมาใหม่ ***
-        function clearAllLocalStorageData() {
-            localStorage.removeItem('repairJobsData');
-            jobs = [];
-            localStorage.removeItem('registeredUsers'); 
-            registeredUsers = {}; 
-            
-            // สร้าง Admin กลับมาทันทีหลังลบ
-            registeredUsers['admin'] = { password: 'admin', id: 'ADM001', name: 'Admin System', phone: '090-000-0000', username: 'admin' };
-            saveUsers();
-            
-            console.log("ALL application data (Jobs and Users) has been CLEARED from Local Storage.");
+        // NEW: Save/Add a Single Job to Firebase
+        async function saveNewJob(newJob) {
+            try {
+                // บันทึกงานใหม่ และใช้ ID เป็น Document ID
+                await db.collection("jobs").doc(String(newJob.id)).set(newJob);
+                console.log("Job saved to Firebase:", newJob.id);
+            } catch (error) {
+                console.error("Error saving job to Firebase:", error);
+                alert("บันทึกงานไม่สำเร็จ! (Firebase Error)");
+                throw error; // ส่ง Error ต่อไปให้ handleSubmit จัดการ
+            }
         }
         
-        // *** NEW: ฟังก์ชันยืนยันรหัสผ่านสำหรับการล้างข้อมูล ***
-        function confirmDataWipe() {
+        // NEW: Update Job Status in Firebase
+        async function updateJobStatus(jobId, status) {
+            try {
+                await db.collection("jobs").doc(String(jobId)).update({ status: status });
+                // อัปเดตข้อมูลใน jobs array ทันที
+                const job = jobs.find(j => j.id === jobId);
+                if (job) job.status = status;
+                
+                console.log(`Job ${jobId} status updated to ${status} in Firebase.`);
+            } catch (error) {
+                console.error("Error updating job status:", error);
+                alert("อัปเดตสถานะงานไม่สำเร็จ! (Firebase Error)");
+            }
+        }
+
+        // NEW: Save/Add a Single User to Firebase
+        async function saveUser(user) {
+            try {
+                // ใช้ username เป็น Document ID
+                await db.collection("users").doc(user.username).set(user);
+                registeredUsers[user.username] = user; // อัปเดตใน Local object
+                console.log("User saved to Firebase:", user.username);
+            } catch (error) {
+                console.error("Error saving user to Firebase:", error);
+                alert("บันทึกข้อมูลช่างไม่สำเร็จ! (Firebase Error)");
+            }
+        }
+
+        // NEW: Load Users from Firebase
+        async function loadUsers() {
+            try {
+                const snapshot = await db.collection("users").get();
+                registeredUsers = {};
+                snapshot.docs.forEach(doc => {
+                    const user = doc.data();
+                    registeredUsers[user.username] = user;
+                });
+                console.log("Users loaded from Firebase:", Object.keys(registeredUsers).length);
+            } catch (error) {
+                console.error("Error loading users from Firebase:", error);
+                // ไม่มีการสำรอง LocalStorage อีกต่อไปเพื่อบังคับใช้ Cloud Sync
+                registeredUsers = {};
+            }
+        }
+        
+        // NEW: Clear ALL Data from Firebase Collections
+        async function clearAllFirebaseData() {
+            try {
+                // 1. Delete all Jobs
+                const jobDocs = await db.collection('jobs').get();
+                const jobDeletePromises = jobDocs.docs.map(doc => doc.ref.delete());
+                await Promise.all(jobDeletePromises);
+                jobs = [];
+
+                // 2. Delete all Users (ยกเว้น Admin ซึ่งจะถูกสร้างกลับมาใหม่)
+                const userDocs = await db.collection('users').get();
+                const userDeletePromises = userDocs.docs.map(doc => doc.ref.delete());
+                await Promise.all(userDeletePromises);
+                registeredUsers = {}; 
+                
+                // 3. Re-create Admin immediately
+                const adminUser = { password: 'admin', id: 'ADM001', name: 'Admin System', phone: '090-000-0000', username: 'admin' };
+                await saveUser(adminUser); // ใช้ saveUser เพื่อบันทึก Admin กลับไป
+                
+                console.log("ALL application data (Jobs and Users) has been CLEARED from Firebase.");
+                alert('✅ ล้างข้อมูลทั้งหมดใน Firebase เรียบร้อยแล้ว');
+
+            } catch (e) {
+                console.error("Error clearing Firebase data:", e);
+                alert('❌ เกิดข้อผิดพลาดในการล้างข้อมูล Firebase');
+            }
+        }
+        
+        // *** NEW: ฟังก์ชันยืนยันรหัสผ่านสำหรับการล้างข้อมูล (เรียกใช้ clearAllFirebaseData) ***
+        async function confirmDataWipe() {
             if (currentRole !== 'admin') return; 
             
-            const inputPass = prompt("⚠️ คำเตือน! การดำเนินการนี้จะลบข้อมูลงานซ่อมและรายชื่อช่างทั้งหมด\n\nโปรดป้อนรหัสผ่านสำหรับล้างข้อมูลเพื่อยืนยัน:");
+            const inputPass = prompt("⚠️ คำเตือน! การดำเนินการนี้จะลบข้อมูลงานซ่อมและรายชื่อช่างทั้งหมดบนระบบคลาวด์ (Firebase)\n\nโปรดป้อนรหัสผ่านสำหรับล้างข้อมูลเพื่อยืนยัน:");
             
             if (inputPass === WIPE_PASSWORD) {
-                clearAllLocalStorageData();
-                alert('✅ ล้างข้อมูลทั้งหมดเรียบร้อยแล้ว');
+                await clearAllFirebaseData(); // ใช้ await
                 // โหลดข้อมูลใหม่หลังจากล้าง
-                loadJobs(); 
-                loadUsers(); 
+                await loadJobs(); 
+                await loadUsers(); 
                 renderJobsList();
                 showJobListView();
             } else if (inputPass !== null) {
@@ -209,13 +282,14 @@
             }
         }
 
+        // แก้ไข startAdminSync ให้เรียกใช้ loadJobs() แบบ async
         function startAdminSync() {
             if (syncInterval) clearInterval(syncInterval); 
             
-            syncInterval = setInterval(() => {
+            syncInterval = setInterval(async () => { // เพิ่ม async
                 if (currentRole === 'admin' && !document.getElementById('jobListView').classList.contains('hidden')) { 
                     const oldJobCount = jobs.length;
-                    loadJobs(); 
+                    await loadJobs(); // ใช้ await
                     if (jobs.length !== oldJobCount) {
                         renderJobsList();
                         console.log(`[Admin Sync] Found ${jobs.length - oldJobCount} new job(s). Updating list.`);
@@ -249,8 +323,8 @@
             }
         }
         
-        function showUserListView() {
-            loadUsers(); 
+        async function showUserListView() { // เพิ่ม async
+            await loadUsers(); // ใช้ await
             
             document.getElementById('jobListView').classList.add('hidden');
             document.getElementById('repairFormView').classList.add('hidden');
@@ -271,8 +345,8 @@
             renderUserList(); 
         }
 
-        function showJobListView() {
-            loadJobs(); 
+        async function showJobListView() { // เพิ่ม async
+            await loadJobs(); // ใช้ await
             
             document.getElementById('jobListView').classList.remove('hidden');
             document.getElementById('repairFormView').classList.add('hidden');
@@ -331,8 +405,8 @@
             fillTechnicianForm();
         }
 
-        function showJobDetails(jobId) {
-            loadJobs(); 
+        async function showJobDetails(jobId) { // เพิ่ม async
+            await loadJobs(); // ใช้ await
             const job = jobs.find(j => j.id === jobId);
             if (!job) {
                 alert('ไม่พบรายการงาน');
@@ -468,18 +542,19 @@
 
         // --- 2. Authentication Logic ---
 
-        function unifiedLogin() {
-            loadUsers(); 
+        async function unifiedLogin() { // เพิ่ม async
+            await loadUsers(); // ใช้ await
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
             
             if (username === 'admin' && password === 'admin') {
                 currentRole = 'admin';
                 userData = { id: 'ADM001', name: 'Admin System', phone: '090-000-0000', username: username };
-                // ตรวจสอบให้แน่ใจว่า Admin มีอยู่ใน registeredUsers เสมอ
+                
+                // ตรวจสอบและสร้าง Admin ใน Firebase ถ้ายังไม่มี
                 if (!registeredUsers[username]) {
-                    registeredUsers[username] = { password: password, id: 'ADM001', name: 'Admin System', phone: '090-000-0000', username: username };
-                    saveUsers(); 
+                    const adminUser = { password: password, id: 'ADM001', name: 'Admin System', phone: '090-000-0000', username: username };
+                    await saveUser(adminUser); 
                 }
                 setupMainApp();
                 return;
@@ -496,8 +571,8 @@
             alert('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่');
         }
         
-        function registerUser() {
-            loadUsers(); 
+        async function registerUser() { // เพิ่ม async
+            await loadUsers(); // ใช้ await
             const user = document.getElementById('regUsername').value.trim();
             const password = document.getElementById('regPassword').value;
             const id = document.getElementById('regEmployeeId').value.trim();
@@ -510,8 +585,8 @@
                     return;
                 }
                 
-                registeredUsers[user] = { password: password, id: id, name: name, phone: phone, username: user };
-                saveUsers(); 
+                const newUser = { password: password, id: id, name: name, phone: phone, username: user };
+                await saveUser(newUser); // ใช้ await saveUser
                 
                 currentRole = 'user';
                 userData = { id: id, name: name, phone: phone, username: user };
@@ -547,11 +622,11 @@
         }
 
         // *** ฟังก์ชัน setupMainApp: จัดการการแสดงผลปุ่ม Admin ***
-        function setupMainApp() {
-            loadUsers(); 
+        async function setupMainApp() { // เพิ่ม async
+            await loadUsers(); // ใช้ await
 
             if (currentRole === 'admin') {
-                loadJobs(); 
+                await loadJobs(); // ใช้ await
                 
                 // แสดงปุ่ม Admin
                 const userViewButton = document.getElementById('btnUserView');
@@ -608,6 +683,7 @@
                 
                 let actionButton = '';
                 if (currentRole === 'admin' && isPending) {
+                    // เรียก completeJob แบบมี await
                     actionButton = `<button onclick="event.stopPropagation(); completeJob(${job.id})" class="px-4 py-1.5 bg-green-600 text-white rounded font-semibold hover:bg-green-700 transition"><i class="fas fa-check"></i> ดำเนินการเสร็จสิ้น</button>`;
                 }
 
@@ -631,11 +707,12 @@
             });
         }
         
-        function completeJob(jobId) {
+        async function completeJob(jobId) { // เพิ่ม async
             const jobIndex = jobs.findIndex(job => job.id === jobId);
             if (jobIndex > -1) {
-                jobs[jobIndex].status = 'completed';
-                saveJobs(); 
+                // เปลี่ยนไปเรียกใช้ Firebase update
+                await updateJobStatus(jobId, 'completed');
+                 
                 alert(`งานหมายเลข ${jobId} ถูกทำเครื่องหมายว่า "ดำเนินการเสร็จสิ้น" แล้ว`);
                 renderJobsList();
             }
@@ -697,11 +774,12 @@
 
         // --- 4. Form Submission Logic ---
 
-        async function handleSubmit() {
+        async function handleSubmit() { // เพิ่ม async
             if (!validateForm()) return; 
 
-            loadJobs(); 
-            const id = jobs.length > 0 ? jobs[jobs.length - 1].id + 1 : 1001;
+            await loadJobs(); // ใช้ await เพื่อให้แน่ใจว่าได้ ID ล่าสุด
+            // คำนวณ ID ใหม่จากข้อมูลที่เพิ่งโหลดมาจาก Firebase
+            const id = jobs.length > 0 ? jobs[jobs.length - 1].id + 1 : 1001; 
             
             const imagesToSave = selectedFiles.map(f => ({ 
                 name: f.name, 
@@ -720,21 +798,26 @@
                 imageFiles: imagesToSave, 
             };
             
-            jobs.push(newJob);
-            saveJobs(); 
+            try {
+                await saveNewJob(newJob); // เรียกใช้ Firebase Save
+                
+                alert(`บันทึกงานหมายเลข ${id} เรียบร้อย สถานะ: กำลังดำเนินการ (ซิงค์กับ Cloud)`);
+                
+                document.getElementById('repairForm').reset();
+                document.getElementById('dynamicInputsContainer').innerHTML = '';
+                document.getElementById('fileListContainer').classList.add('hidden');
+                
+                selectedFiles = []; 
+                renderFileList(); 
+                
+                document.querySelectorAll('#deviceCheckboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
 
-            alert(`บันทึกงานหมายเลข ${id} เรียบร้อย สถานะ: กำลังดำเนินการ`);
-            
-            document.getElementById('repairForm').reset();
-            document.getElementById('dynamicInputsContainer').innerHTML = '';
-            document.getElementById('fileListContainer').classList.add('hidden');
-            
-            selectedFiles = []; 
-            renderFileList(); 
-            
-            document.querySelectorAll('#deviceCheckboxes input[type="checkbox"]').forEach(cb => cb.checked = false);
-
-            showJobListView(); 
+                showJobListView(); 
+            } catch (e) {
+                // หาก saveNewJob ล้มเหลว (เช่น Firebase Error) จะไม่ทำการเปลี่ยนหน้า
+                console.error("Submission failed:", e);
+                alert("เกิดข้อผิดพลาดในการบันทึกงาน กรุณาลองใหม่");
+            }
         }
 
 
@@ -825,18 +908,21 @@
                     if (snInput) {
                         const snValue = snInput.value.trim();
                         snInput.classList.remove('input-error');
+                        // ต้องกรอก SN เสมอ
                         if (!snValue) { groupHasError = true; snInput.classList.add('input-error'); }
                     }
                     
                     if (cHDATVInput) {
                         const atvValue = cHDATVInput.value.trim();
                         cHDATVInput.classList.remove('input-error');
+                        // TrueINNO ต้องกรอก C-HD ATV
                         if (!atvValue && deviceType === 'TrueINNO') { groupHasError = true; cHDATVInput.classList.add('input-error'); }
                     }
 
                     if (cskyInput) {
                         const skyValue = cskyInput.value.trim();
                         cskyInput.classList.remove('input-error');
+                        // TrueVision ต้องกรอก C-SKY
                         if (!skyValue && deviceType === 'TrueVision') { groupHasError = true; cskyInput.classList.add('input-error'); }
                     }
                     
@@ -861,233 +947,199 @@
             return true;
         }
 
-        // *** ฟังก์ชันแก้ไข: renderDeviceInputs (สร้าง Input Group 1 ชุดเริ่มต้น พร้อมปุ่มเพิ่ม) ***
+        // --- 6. Dynamic Input Management (สร้าง/จัดการ Input SN/ID) ---
+
         function renderDeviceInputs() {
             const container = document.getElementById('dynamicInputsContainer');
-            container.innerHTML = ''; 
-            const checkboxes = document.querySelectorAll('#deviceCheckboxes input[type="checkbox"]:checked');
-            if (checkboxes.length > 0) {
-                const header = document.createElement('div');
-                header.className = "text-md font-bold text-gray-700 mt-4 mb-2";
-                header.innerText = "กรุณากรอก/สแกน SN อุปกรณ์ที่เลือก:";
-                container.appendChild(header);
-            }
-            checkboxes.forEach((cb) => {
-                const deviceType = cb.value;
+            container.innerHTML = '';
+            
+            const selectedCheckboxes = document.querySelectorAll('#deviceCheckboxes input[type="checkbox"]:checked');
+            
+            selectedCheckboxes.forEach(checkbox => {
+                const deviceType = checkbox.value;
                 const card = document.createElement('div');
-                card.className = "device-card bg-white border border-l-4 border-l-blue-500 border-gray-200 p-4 rounded shadow-sm";
-                card.dataset.deviceType = deviceType; 
-                
-                // Dynamic Container สำหรับเก็บ Input Groups ทั้งหมด
-                card.innerHTML = `<h4 class="font-bold text-blue-600 mb-2"><i class="fas fa-box mr-1"></i> ${deviceType}</h4>
-                                <div class="inputs-wrapper space-y-4" data-device-type="${deviceType}">
-                                    ${createInputGroup(deviceType, 0)}
-                                </div>
-                                <button type="button" 
-                                        onclick="addDeviceInput('${deviceType}')" 
-                                        class="mt-3 px-4 py-1.5 bg-gray-200 text-gray-700 rounded-md font-semibold hover:bg-gray-300 text-sm">
-                                    <i class="fas fa-plus mr-1"></i> เพิ่ม SN / ID ${deviceType}
-                                </button>`;
-                container.appendChild(card);
-            });
-        }
-        
-        // *** ฟังก์ชันแก้ไข: createInputGroup (สร้าง Input Group 1 ชุดตาม index) ***
-        function createInputGroup(device, index) {
-            let inputsHtml = '';
-
-            // 1. SN (Serial Number) - ต้องมีสำหรับทุกอุปกรณ์
-            inputsHtml += createSingleInput(device, index, "SN (Serial Number)", "sn", "สแกน SN อุปกรณ์", true);
-            
-            // 2. C-HD ATV (สำหรับ TrueINNO)
-            if (device === 'TrueINNO') {
-                inputsHtml += createSingleInput(device, index, "C-HD ATV", "cHDATV", "สแกน C-HD ATV", true);
-            }
-            
-            // 3. C-SKY (สำหรับ TrueVision)
-            if (device === 'TrueVision') {
-                inputsHtml += createSingleInput(device, index, "C-SKY", "csky", "สแกน C-SKY", true);
-            }
-
-            // Wrap the inputs and add a remove button
-            const removeButton = index > 0 ? `<button type="button" class="ml-2 text-red-500 hover:text-red-700 text-lg" onclick="removeDeviceInput(this)"><i class="fas fa-times-circle"></i></button>` : '';
-
-            return `<div class="input-group grid grid-cols-1 md:grid-cols-2 gap-4 border p-3 rounded-lg bg-gray-100" data-index="${index}">
-                        <div class="md:col-span-2 flex justify-between items-center border-b pb-2 mb-2">
-                            <span class="text-sm font-bold text-gray-700">ชุดอุปกรณ์ #${index + 1}</span>
-                            ${removeButton}
+                card.className = 'device-card bg-white p-4 rounded-lg shadow-md border border-gray-200';
+                card.innerHTML = `
+                    <h4 class="text-md font-bold text-red-600 mb-3"><i class="fas fa-microchip mr-2"></i> ข้อมูล ${deviceType}</h4>
+                    <div class="inputs-wrapper space-y-3" data-device-type="${deviceType}">
                         </div>
-                        ${inputsHtml}
-                    </div>`;
+                    <button type="button" onclick="addDeviceInput(this, '${deviceType}')" class="mt-4 px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600">
+                        <i class="fas fa-plus mr-1"></i> เพิ่มอุปกรณ์ชุดที่ ${document.querySelectorAll(`.inputs-wrapper[data-device-type="${deviceType}"] .input-group`).length + 1}
+                    </button>
+                `;
+                container.appendChild(card);
+
+                // Add the first input group automatically
+                addDeviceInput(card.querySelector('button'), deviceType);
+            });
         }
 
-        // ฟังก์ชันย่อยสำหรับสร้าง input field เดี่ยว
-        function createSingleInput(device, index, label, snType, placeholder, isRequired) {
-            const requiredMark = isRequired ? '<span class="text-red-500">*</span>' : '';
-            const nameAttr = `${device}-${snType}-${index}`; // ชื่อ input แยกตาม index
+        function createInputGroup(deviceType, groupIndex) {
+            const group = document.createElement('div');
+            group.className = 'input-group p-3 border border-gray-300 rounded-md bg-gray-50 relative';
+            group.innerHTML = `<h5 class="text-sm font-semibold mb-2 text-gray-700">ชุดอุปกรณ์ที่ ${groupIndex}</h5>`;
 
-            return `<div class="relative"><label class="block text-xs font-bold text-gray-600 mb-1">${label} ${requiredMark}</label><div class="flex"><input type="text" name="${nameAttr}" data-sn-type="${snType}" data-device="${device}" data-index="${index}" class="sn-input block w-full border border-gray-300 rounded-l-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="${placeholder}"><button type="button" class="bg-blue-600 text-white px-3 rounded-r-md hover:bg-blue-700 text-sm flex items-center" onclick="simulateScan(this)"><i class="fas fa-barcode mr-1"></i> Scan</button></div></div>`;
-        }
-        
-        // *** ฟังก์ชันใหม่: addDeviceInput (เพิ่มชุดสแกน) ***
-        function addDeviceInput(deviceType) {
-            const wrapper = document.querySelector(`.inputs-wrapper[data-device-type="${deviceType}"]`);
-            if (!wrapper) return;
-            
-            // หา index ถัดไป
-            const existingInputs = wrapper.querySelectorAll('.input-group');
-            const newIndex = existingInputs.length; 
-            
-            const newGroup = createInputGroup(deviceType, newIndex);
-            wrapper.insertAdjacentHTML('beforeend', newGroup);
-        }
+            // 1. SN Input (Required for all)
+            group.appendChild(createSingleInput('SN', 'sn', 'Serial Number ของอุปกรณ์ (สำคัญ)', true));
 
-        // *** ฟังก์ชันใหม่: removeDeviceInput (ลบชุดสแกน) ***
-        function removeDeviceInput(button) {
-            const groupToRemove = button.closest('.input-group');
-            if (groupToRemove) {
-                groupToRemove.remove();
-                
-                // จัดเรียง Index ใหม่
-                const wrapper = groupToRemove.closest('.inputs-wrapper');
-                const remainingGroups = wrapper.querySelectorAll('.input-group');
-                
-                remainingGroups.forEach((group, index) => {
-                    group.dataset.index = index;
-                    
-                    // อัปเดต Title
-                    group.querySelector('span').innerText = `ชุดอุปกรณ์ #${index + 1}`;
-                    
-                    // อัปเดต data-index และ name attribute ใน Input Fields
-                    group.querySelectorAll('input').forEach(input => {
-                        input.dataset.index = index;
-                        const oldName = input.getAttribute('name');
-                        const parts = oldName.split('-'); 
-                        if (parts.length >= 3) {
-                            const newName = `${parts[0]}-${parts[1]}-${index}`;
-                            input.setAttribute('name', newName);
-                        }
-                    });
-
-                    // จัดการปุ่มลบ (แสดงเฉพาะชุดที่ 2 เป็นต้นไป)
-                    const removeBtnContainer = group.querySelector('.flex.justify-between');
-                    if(removeBtnContainer && index === 0) {
-                        // ถ้าเป็นชุดแรก ให้มั่นใจว่าไม่มีปุ่มลบ
-                        let removeBtn = removeBtnContainer.querySelector('.fa-times-circle');
-                        if (removeBtn) {
-                            removeBtn.closest('button').remove();
-                        }
-                    } else if (removeBtnContainer && index > 0) {
-                         // ถ้าไม่ใช่ชุดแรก และยังไม่มีปุ่ม ให้เพิ่มปุ่มลบ
-                        let removeBtn = removeBtnContainer.querySelector('.fa-times-circle');
-                        if (!removeBtn) {
-                            removeBtnContainer.innerHTML += `<button type="button" class="ml-2 text-red-500 hover:text-red-700 text-lg" onclick="removeDeviceInput(this)"><i class="fas fa-times-circle"></i></button>`;
-                        }
-                    }
-                });
+            // 2. Specific Inputs
+            if (deviceType === 'TrueVision') {
+                group.appendChild(createSingleInput('C-SKY', 'csky', 'ID C-SKY (จำเป็น)', true));
+            } else if (deviceType === 'TrueINNO') {
+                group.appendChild(createSingleInput('C-HD ATV', 'cHDATV', 'ID C-HD ATV (จำเป็น)', true));
             }
-        }
-        
-        function simulateScan(btn) {
-            const input = btn.previousElementSibling;
-            input.focus();
-            let prefix = 'SCAN';
-            if (input.dataset.snType === 'cHDATV') prefix = 'ATV';
-            if (input.dataset.snType === 'csky') prefix = 'SKY';
 
-            input.value = `${prefix}-${Math.floor(Math.random() * 10000000)}`;
-            input.classList.add('bg-green-50');
-            setTimeout(() => {
-                input.classList.remove('bg-green-50');
-                input.classList.remove('input-error');
-                
-                // ตรวจสอบความถูกต้องของ Card หลังจากสแกน
-                const card = input.closest('.device-card');
-                if (card) {
-                    // ตรวจสอบว่ายังมี error ใน Card นี้หรือไม่
-                    const remainingErrors = card.querySelectorAll('.sn-input.input-error').length;
-                    if (remainingErrors === 0) {
-                        card.classList.remove('border-red-500');
-                    }
-                }
-            }, 500);
-        }
-        
-        function handleFiles(files) {
-            const filesArray = Array.from(files);
+            // 3. Remove Button
+            group.innerHTML += `
+                <button type="button" onclick="removeDeviceInput(this)" 
+                    class="absolute top-1 right-1 p-1 text-sm text-red-600 hover:text-red-800 transition">
+                    <i class="fas fa-times-circle"></i>
+                </button>
+            `;
 
-            const newImageFiles = filesArray.filter(file => {
-                const isImage = file.type.startsWith('image/');
-                const isDuplicate = selectedFiles.some(f => f.name === file.name && f.file.size === file.size); 
-                return isImage && !isDuplicate;
+            return group;
+        }
+
+        function createSingleInput(label, snType, placeholder, required = false) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'mb-2';
+            const requiredMark = required ? '<span class="text-red-500">*</span>' : '';
+            wrapper.innerHTML = `
+                <label class="block text-xs font-medium text-gray-600">${label} ${requiredMark}</label>
+                <input type="text" data-sn-type="${snType}" 
+                    class="mt-1 block w-full border border-gray-300 rounded-md p-2 text-sm focus:ring-blue-500 focus:border-blue-500" 
+                    placeholder="${placeholder}" ${required ? '' : ''}>
+            `;
+            return wrapper;
+        }
+
+        function addDeviceInput(button, deviceType) {
+            const wrapper = button.previousElementSibling; // inputs-wrapper
+            const nextGroupIndex = wrapper.querySelectorAll('.input-group').length + 1;
+            const newGroup = createInputGroup(deviceType, nextGroupIndex);
+            wrapper.appendChild(newGroup);
+
+            // Update button text to show the next index
+            button.innerHTML = `<i class="fas fa-plus mr-1"></i> เพิ่มอุปกรณ์ชุดที่ ${nextGroupIndex + 1}`;
+        }
+
+        function removeDeviceInput(button) {
+            const group = button.closest('.input-group');
+            const wrapper = group.closest('.inputs-wrapper');
+            const buttonToUpdate = wrapper.nextElementSibling;
+
+            group.remove();
+
+            // Re-index groups
+            wrapper.querySelectorAll('.input-group').forEach((g, index) => {
+                g.querySelector('h5').textContent = `ชุดอุปกรณ์ที่ ${index + 1}`;
             });
 
-            if (newImageFiles.length === 0) {
-                renderFileList();
+            // Update button text
+            const nextGroupIndex = wrapper.querySelectorAll('.input-group').length + 1;
+            buttonToUpdate.innerHTML = `<i class="fas fa-plus mr-1"></i> เพิ่มอุปกรณ์ชุดที่ ${nextGroupIndex}`;
+            
+            // If no groups left, remove the entire card, but only if its not the first type
+            if (nextGroupIndex === 1) {
+                // If the user tries to remove the last one, just re-add a new empty one
+                addDeviceInput(buttonToUpdate, wrapper.dataset.deviceType);
+            }
+        }
+
+        // --- 7. Image Handling ---
+
+        function handleFiles(files) {
+            if (files.length === 0) return;
+
+            const readerPromises = Array.from(files).map(file => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        resolve({
+                            name: file.name,
+                            dataUrl: e.target.result // Base64 string
+                        });
+                    };
+                    reader.onerror = error => reject(error);
+                    reader.readAsDataURL(file);
+                });
+            });
+
+            Promise.all(readerPromises)
+                .then(newFiles => {
+                    selectedFiles.push(...newFiles);
+                    renderFileList();
+                })
+                .catch(error => {
+                    alert('เกิดข้อผิดพลาดในการโหลดไฟล์รูปภาพ');
+                    console.error("File loading error:", error);
+                });
+        }
+
+        function renderFileList() {
+            const list = document.getElementById('fileList');
+            const container = document.getElementById('fileListContainer');
+            list.innerHTML = '';
+
+            if (selectedFiles.length === 0) {
+                container.classList.add('hidden');
                 return;
             }
-            
-            newImageFiles.forEach(file => {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    selectedFiles.push({
-                        file: file, 
-                        name: file.name,
-                        dataUrl: e.target.result 
-                    });
-                    renderFileList(); 
-                };
-                reader.onerror = (error) => {
-                    console.error('Error reading file:', error);
-                    alert(`เกิดข้อผิดพลาดในการอ่านไฟล์: ${file.name}`);
-                };
-                reader.readAsDataURL(file);
-            });
-        }
-        
-        function renderFileList() {
-            const fileListContainer = document.getElementById('fileListContainer');
-            const fileList = document.getElementById('fileList');
-            
-            fileList.innerHTML = '';
 
-            if (selectedFiles.length > 0) {
-                fileListContainer.classList.remove('hidden');
-            } else {
-                fileListContainer.classList.add('hidden');
-            }
-            
-            selectedFiles.forEach((fileEntry, index) => {
-                const li = document.createElement('li');
-                li.className = "flex justify-between items-center bg-white p-2 rounded border shadow-sm text-sm";
-                li.innerHTML = `<span class="truncate flex items-center"><i class="far fa-image text-blue-500 mr-2"></i> ${fileEntry.name}</span><button type="button" class="text-red-500 hover:text-red-700 ml-2" onclick="removeFile(${index})"><i class="fas fa-times-circle"></i></button>`;
-                fileList.appendChild(li);
+            container.classList.remove('hidden');
+
+            selectedFiles.forEach((file, index) => {
+                const listItem = document.createElement('li');
+                listItem.className = 'flex items-center justify-between p-2 bg-white rounded-md border text-sm';
+                
+                let fileDisplay = '';
+                if (file.dataUrl && file.dataUrl.startsWith('data:image')) {
+                    fileDisplay = `<img src="${file.dataUrl}" alt="${file.name}" class="image-thumbnail mr-3 w-8 h-8 object-cover rounded-md">
+                                   <span class="truncate flex-grow text-gray-700">${file.name}</span>`;
+                } else {
+                    fileDisplay = `<i class="fas fa-file-image mr-3 text-gray-500"></i><span class="truncate flex-grow text-gray-700">${file.name}</span>`;
+                }
+
+                listItem.innerHTML = `
+                    <div class="flex items-center w-full">
+                        ${fileDisplay}
+                        <button type="button" onclick="removeFile(${index})" class="text-red-500 hover:text-red-700 ml-3 flex-shrink-0">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(listItem);
             });
         }
-        
+
         function removeFile(index) {
             selectedFiles.splice(index, 1);
-            renderFileList(); 
-            if (selectedFiles.length === 0) {
-                document.getElementById('dropzone-file').value = ''; 
-            }
+            renderFileList();
         }
 
+
+        // --- 8. Initialization ---
+        
         // Set default view on load
-        document.addEventListener('DOMContentLoaded', () => {
-            loadJobs(); 
-            loadUsers(); 
+        document.addEventListener('DOMContentLoaded', async () => { // เพิ่ม async
+            await loadJobs(); // ใช้ await
+            await loadUsers(); // ใช้ await
             
-            // ตรวจสอบและสร้างบัญชี Admin ถ้ายังไม่มี
+            // ตรวจสอบและสร้างบัญชี Admin ใน Firebase ถ้ายังไม่มี
             if (!registeredUsers['admin']) {
-                registeredUsers['admin'] = { password: 'admin', id: 'ADM001', name: 'Admin System', phone: '090-000-0000', username: 'admin' };
-                saveUsers();
+                const adminUser = { password: 'admin', id: 'ADM001', name: 'Admin System', phone: '090-000-0000', username: 'admin' };
+                await saveUser(adminUser); // ใช้ await saveUser
             }
             
             showPage('adminLogin');
             document.getElementById('username').value = '';
             document.getElementById('password').value = '';
+
+            // Ensure Firebase is initialized
+            if (typeof db === 'undefined') {
+                alert("❌ การเชื่อมต่อ Firebase ล้มเหลว! โปรดตรวจสอบ Firebase Config และการเปิดใช้งาน Firestore");
+            }
         });
     </script>
-    </body>
+</body>
 </html>
